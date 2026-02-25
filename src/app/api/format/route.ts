@@ -65,7 +65,6 @@ export async function POST(request: Request) {
         const azure = createAzure({
             resourceName: process.env.AZURE_OPENAI_ENDPOINT!.replace("https://", "").replace(".openai.azure.com", ""),
             apiKey: process.env.AZURE_OPENAI_API_KEY!,
-            apiVersion: process.env.AZURE_OPENAI_API_VERSION!,
         });
 
         const allUpdates: Array<{ id: string; speaker_label: string; text: string }> = [];
@@ -75,7 +74,7 @@ export async function POST(request: Request) {
             const userPrompt = JSON.stringify(batch, null, 2);
 
             const { text: llmResponse } = await generateText({
-                model: azure(process.env.AZURE_OPENAI_DEPLOYMENT ?? "gpt-5.2-chat"),
+                model: azure("gpt-5.2-chat"),
                 system: systemPrompt,
                 prompt: userPrompt,
                 temperature: 0.2,
