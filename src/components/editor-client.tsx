@@ -38,7 +38,7 @@ export function EditorClient({ transcription, utterances }: EditorClientProps) {
     return (
         <div className="gradient-bg min-h-screen">
             {/* Header */}
-            <header className="sticky top-0 z-50 border-b border-border/50 bg-background/80 backdrop-blur-xl">
+            <header className="sticky top-0 z-50 border-b border-border bg-white/80 backdrop-blur-xl">
                 <div className="mx-auto flex h-14 max-w-7xl items-center gap-4 px-4">
                     <Button
                         variant="ghost"
@@ -50,11 +50,11 @@ export function EditorClient({ transcription, utterances }: EditorClientProps) {
                         Voltar
                     </Button>
 
-                    <div className="h-6 w-px bg-border/50" />
+                    <div className="h-6 w-px bg-border" />
 
                     <div className="flex items-center gap-2 min-w-0 flex-1">
                         <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md gradient-primary">
-                            <Scale className="h-4 w-4 text-primary-foreground" />
+                            <Scale className="h-4 w-4 text-white" />
                         </div>
                         <h1 className="truncate text-sm font-semibold text-foreground">
                             {transcription.title}
@@ -80,11 +80,11 @@ export function EditorClient({ transcription, utterances }: EditorClientProps) {
 
                         {/* Stats */}
                         <div className="mt-4 grid grid-cols-2 gap-3">
-                            <div className="rounded-lg border border-border/30 bg-card/30 p-3 text-center">
+                            <div className="rounded-lg border border-border bg-white p-3 text-center shadow-sm">
                                 <p className="text-2xl font-bold text-foreground">{utterances.length}</p>
                                 <p className="text-xs text-muted-foreground">Falas</p>
                             </div>
-                            <div className="rounded-lg border border-border/30 bg-card/30 p-3 text-center">
+                            <div className="rounded-lg border border-border bg-white p-3 text-center shadow-sm">
                                 <p className="text-2xl font-bold text-foreground">
                                     {new Set(utterances.map((u) => u.speaker_label)).size}
                                 </p>

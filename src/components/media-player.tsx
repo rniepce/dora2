@@ -39,23 +39,23 @@ export const MediaPlayer = forwardRef<HTMLAudioElement, MediaPlayerProps>(
         const skipForward = () => onSeek(Math.min(duration, currentTime + 10));
 
         return (
-            <div className="rounded-xl border border-border/50 bg-card/60 backdrop-blur-sm p-4">
+            <div className="rounded-xl border border-border bg-white p-4 shadow-sm">
                 {/* Hidden HTML5 audio element */}
                 <audio ref={ref} src={src} preload="metadata" />
 
-                {/* Waveform-like progress bar */}
+                {/* Progress bar */}
                 <div
-                    className="group relative h-10 cursor-pointer rounded-lg bg-background/50 overflow-hidden mb-4"
+                    className="group relative h-10 cursor-pointer rounded-lg bg-gray-100 overflow-hidden mb-4"
                     onClick={handleProgressClick}
                 >
                     {/* Progress fill */}
                     <div
-                        className="absolute inset-y-0 left-0 gradient-primary opacity-30 transition-all"
+                        className="absolute inset-y-0 left-0 gradient-primary opacity-20 transition-all"
                         style={{ width: `${progress}%` }}
                     />
                     {/* Playhead */}
                     <div
-                        className="absolute top-0 bottom-0 w-0.5 bg-primary shadow-lg shadow-primary/50 transition-all"
+                        className="absolute top-0 bottom-0 w-0.5 bg-primary shadow-sm transition-all"
                         style={{ left: `${progress}%` }}
                     />
                     {/* Time overlay */}
@@ -79,7 +79,7 @@ export const MediaPlayer = forwardRef<HTMLAudioElement, MediaPlayerProps>(
 
                     <Button
                         onClick={onTogglePlay}
-                        className="h-10 w-10 rounded-full gradient-primary text-primary-foreground shadow-lg shadow-primary/25 hover:shadow-xl hover:shadow-primary/30"
+                        className="h-10 w-10 rounded-full gradient-primary text-white shadow-md hover:shadow-lg"
                         size="icon"
                     >
                         {isPlaying ? (

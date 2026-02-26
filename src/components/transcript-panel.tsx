@@ -4,21 +4,21 @@ import { useEffect, useRef } from "react";
 import { User, Clock } from "lucide-react";
 import type { Utterance } from "@/lib/types";
 
-// Paleta de cores para diferentes locutores
+// Paleta TJMG — cores ajustadas para tema claro
 const SPEAKER_COLORS: Record<string, { bg: string; text: string; border: string }> = {
-    "JUIZ(A)": { bg: "bg-amber-500/15", text: "text-amber-400", border: "border-amber-500/30" },
-    "ADV. AUTOR": { bg: "bg-blue-500/15", text: "text-blue-400", border: "border-blue-500/30" },
-    "ADV. RÉU": { bg: "bg-rose-500/15", text: "text-rose-400", border: "border-rose-500/30" },
-    "PROMOTOR(A)": { bg: "bg-blue-500/15", text: "text-blue-400", border: "border-blue-500/30" },
-    "DEFENSOR(A)": { bg: "bg-rose-500/15", text: "text-rose-400", border: "border-rose-500/30" },
-    "TESTEMUNHA": { bg: "bg-purple-500/15", text: "text-purple-400", border: "border-purple-500/30" },
-    "DEPOENTE": { bg: "bg-purple-500/15", text: "text-purple-400", border: "border-purple-500/30" },
-    "RÉU": { bg: "bg-orange-500/15", text: "text-orange-400", border: "border-orange-500/30" },
-    "AUTOR": { bg: "bg-cyan-500/15", text: "text-cyan-400", border: "border-cyan-500/30" },
-    "ESCRIVÃO(Ã)": { bg: "bg-gray-500/15", text: "text-gray-400", border: "border-gray-500/30" },
+    "JUIZ(A)": { bg: "bg-amber-100", text: "text-amber-800", border: "border-amber-300" },
+    "ADV. AUTOR": { bg: "bg-blue-100", text: "text-blue-800", border: "border-blue-300" },
+    "ADV. RÉU": { bg: "bg-rose-100", text: "text-rose-800", border: "border-rose-300" },
+    "PROMOTOR(A)": { bg: "bg-blue-100", text: "text-blue-800", border: "border-blue-300" },
+    "DEFENSOR(A)": { bg: "bg-rose-100", text: "text-rose-800", border: "border-rose-300" },
+    "TESTEMUNHA": { bg: "bg-purple-100", text: "text-purple-800", border: "border-purple-300" },
+    "DEPOENTE": { bg: "bg-purple-100", text: "text-purple-800", border: "border-purple-300" },
+    "RÉU": { bg: "bg-orange-100", text: "text-orange-800", border: "border-orange-300" },
+    "AUTOR": { bg: "bg-cyan-100", text: "text-cyan-800", border: "border-cyan-300" },
+    "ESCRIVÃO(Ã)": { bg: "bg-gray-100", text: "text-gray-700", border: "border-gray-300" },
 };
 
-const DEFAULT_COLOR = { bg: "bg-emerald-500/15", text: "text-emerald-400", border: "border-emerald-500/30" };
+const DEFAULT_COLOR = { bg: "bg-red-50", text: "text-red-800", border: "border-red-200" };
 
 function getSpeakerColor(label: string) {
     return SPEAKER_COLORS[label] ?? DEFAULT_COLOR;
@@ -65,7 +65,7 @@ export function TranscriptPanel({
                         ref={isActive ? activeRef : undefined}
                         className={`group cursor-pointer rounded-lg border p-3 transition-all duration-200 ${isActive
                                 ? `${color.border} ${color.bg} shadow-md ring-1 ${color.border}`
-                                : "border-border/30 bg-card/30 hover:border-border/50 hover:bg-card/50"
+                                : "border-border bg-white hover:border-primary/20 hover:bg-red-50/30 hover:shadow-sm"
                             }`}
                         onClick={() => onUtteranceClick(utterance.start_time)}
                     >
@@ -80,7 +80,7 @@ export function TranscriptPanel({
                             <button
                                 className={`flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs transition-colors ${isActive
                                         ? `${color.text}`
-                                        : "text-muted-foreground/60 group-hover:text-muted-foreground"
+                                        : "text-muted-foreground group-hover:text-foreground"
                                     }`}
                                 onClick={(e) => {
                                     e.stopPropagation();
@@ -94,7 +94,7 @@ export function TranscriptPanel({
 
                         {/* Text */}
                         <p
-                            className={`text-sm leading-relaxed ${isActive ? "text-foreground" : "text-foreground/80"
+                            className={`text-sm leading-relaxed ${isActive ? "text-foreground font-medium" : "text-foreground/80"
                                 }`}
                         >
                             {utterance.text}
