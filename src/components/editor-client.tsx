@@ -7,6 +7,8 @@ import { ArrowLeft, Scale } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MediaPlayer } from "@/components/media-player";
 import { TranscriptPanel } from "@/components/transcript-panel";
+import { VideoSummary } from "@/components/video-summary";
+import { ChatPanel } from "@/components/chat-panel";
 import { useTimeSync } from "@/hooks/use-time-sync";
 import type { Transcription, Utterance } from "@/lib/types";
 
@@ -36,25 +38,25 @@ export function EditorClient({ transcription, utterances }: EditorClientProps) {
     );
 
     return (
-        <div className="gradient-bg min-h-screen">
-            {/* Header */}
-            <header className="sticky top-0 z-50 border-b border-border bg-white/80 backdrop-blur-xl">
-                <div className="mx-auto flex h-14 max-w-7xl items-center gap-4 px-4">
+        <div className="flex h-screen flex-col bg-background">
+            {/* Header — compacto */}
+            <header className="z-50 border-b border-border bg-white/80 backdrop-blur-xl">
+                <div className="flex h-12 items-center gap-3 px-4">
                     <Button
                         variant="ghost"
                         size="sm"
                         onClick={() => router.push("/dashboard")}
                         className="text-muted-foreground hover:text-foreground"
                     >
-                        <ArrowLeft className="mr-1.5 h-4 w-4" />
+                        <ArrowLeft className="mr-1 h-4 w-4" />
                         Voltar
                     </Button>
 
-                    <div className="h-6 w-px bg-border" />
+                    <div className="h-5 w-px bg-border" />
 
                     <div className="flex items-center gap-2 min-w-0 flex-1">
-                        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md gradient-primary">
-                            <Scale className="h-4 w-4 text-white" />
+                        <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md gradient-primary">
+                            <Scale className="h-3.5 w-3.5 text-white" />
                         </div>
                         <h1 className="truncate text-sm font-semibold text-foreground">
                             {transcription.title}
@@ -63,53 +65,48 @@ export function EditorClient({ transcription, utterances }: EditorClientProps) {
                 </div>
             </header>
 
-            {/* Editor content */}
-            <div className="mx-auto max-w-7xl px-4 py-6">
-                <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_1.4fr]">
-                    {/* Left: Media Player (sticky) */}
-                    <div className="lg:sticky lg:top-20 lg:self-start">
-                        <MediaPlayer
-                            ref={mediaRef}
-                            src={transcription.media_url ?? ""}
-                            currentTime={currentTime}
-                            duration={duration}
-                            isPlaying={isPlaying}
-                            onTogglePlay={togglePlay}
-                            onSeek={seekTo}
-                        />
+            {/* Layout 4 quadrantes — ocupa altura restante */}
+            <div className="flex-1 grid grid-cols-[3fr_2fr] grid-rows-[1.2fr_1fr] gap-3 p-3 min-h-0">
+                {/* ↖ Superior Esquerdo — Vídeo */}
+                <div className="min-h-0 min-w-0">
+                    <MediaPlayer
+                        ref={mediaRef}
+                        src={transcription.media_url ?? ""}
+                        currentTime={currentTime}
+                        duration={duration}
+                        isPlaying={isPlaying}
+                        onTogglePlay={togglePlay}
+                        onSeek={seekTo}
+                    />
+                </div>
 
-                        {/* Stats */}
-                        <div className="mt-4 grid grid-cols-2 gap-3">
-                            <div className="rounded-lg border border-border bg-white p-3 text-center shadow-sm">
-                                <p className="text-2xl font-bold text-foreground">{utterances.length}</p>
-                                <p className="text-xs text-muted-foreground">Falas</p>
-                            </div>
-                            <div className="rounded-lg border border-border bg-white p-3 text-center shadow-sm">
-                                <p className="text-2xl font-bold text-foreground">
-                                    {new Set(utterances.map((u) => u.speaker_label)).size}
-                                </p>
-                                <p className="text-xs text-muted-foreground">Locutores</p>
-                            </div>
-                        </div>
+                {/* ↗ Superior Direito — Transcrição */}
+                <div className="min-h-0 min-w-0 flex flex-col rounded-xl border border-border bg-white shadow-sm">
+                    <div className="flex items-center justify-between border-b border-border px-4 py-3">
+                        <h2 className="text-sm font-semibold text-foreground">
+                            Transcrição
+                        </h2>
+                        <p className="text-[10px] text-muted-foreground">
+                            Clique para pular o áudio
+                        </p>
                     </div>
-
-                    {/* Right: Transcript */}
-                    <div>
-                        <div className="mb-4 flex items-center justify-between">
-                            <h2 className="text-lg font-semibold text-foreground">
-                                Transcrição
-                            </h2>
-                            <p className="text-xs text-muted-foreground">
-                                Clique em uma fala para pular o áudio
-                            </p>
-                        </div>
-
+                    <div className="flex-1 overflow-y-auto min-h-0">
                         <TranscriptPanel
                             utterances={utterances}
                             activeUtteranceId={activeUtteranceId}
                             onUtteranceClick={handleUtteranceClick}
                         />
                     </div>
+                </div>
+
+                {/* ↙ Inferior Esquerdo — Resumo */}
+                <div className="min-h-0 min-w-0">
+                    <VideoSummary transcriptionId={transcription.id} />
+                </div>
+
+                {/* ↘ Inferior Direito — Chat */}
+                <div className="min-h-0 min-w-0">
+                    <ChatPanel transcriptionId={transcription.id} />
                 </div>
             </div>
         </div>

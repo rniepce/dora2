@@ -1,32 +1,36 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { User, Clock } from "lucide-react";
+import { Clock } from "lucide-react";
 import type { Utterance } from "@/lib/types";
 
-// Paleta TJMG — cores ajustadas para tema claro
-const SPEAKER_COLORS: Record<string, { bg: string; text: string; border: string }> = {
-    "JUIZ(A)": { bg: "bg-amber-100", text: "text-amber-800", border: "border-amber-300" },
-    "ADV. AUTOR": { bg: "bg-blue-100", text: "text-blue-800", border: "border-blue-300" },
-    "ADV. RÉU": { bg: "bg-rose-100", text: "text-rose-800", border: "border-rose-300" },
-    "PROMOTOR(A)": { bg: "bg-blue-100", text: "text-blue-800", border: "border-blue-300" },
-    "DEFENSOR(A)": { bg: "bg-rose-100", text: "text-rose-800", border: "border-rose-300" },
-    "TESTEMUNHA": { bg: "bg-purple-100", text: "text-purple-800", border: "border-purple-300" },
-    "DEPOENTE": { bg: "bg-purple-100", text: "text-purple-800", border: "border-purple-300" },
-    "RÉU": { bg: "bg-orange-100", text: "text-orange-800", border: "border-orange-300" },
-    "AUTOR": { bg: "bg-cyan-100", text: "text-cyan-800", border: "border-cyan-300" },
-    "ESCRIVÃO(Ã)": { bg: "bg-gray-100", text: "text-gray-700", border: "border-gray-300" },
+// Paleta TJMG — cores de fundo por tipo de locutor
+const SPEAKER_COLORS: Record<string, { bg: string; accent: string; label: string }> = {
+    "JUIZ(A)": { bg: "bg-amber-50", accent: "bg-amber-400", label: "text-amber-700" },
+    "ADV. AUTOR": { bg: "bg-blue-50", accent: "bg-blue-400", label: "text-blue-700" },
+    "ADV. RÉU": { bg: "bg-rose-50", accent: "bg-rose-400", label: "text-rose-700" },
+    "PROMOTOR(A)": { bg: "bg-blue-50", accent: "bg-blue-400", label: "text-blue-700" },
+    "DEFENSOR(A)": { bg: "bg-rose-50", accent: "bg-rose-400", label: "text-rose-700" },
+    "TESTEMUNHA": { bg: "bg-purple-50", accent: "bg-purple-400", label: "text-purple-700" },
+    "DEPOENTE": { bg: "bg-purple-50", accent: "bg-purple-400", label: "text-purple-700" },
+    "RÉU": { bg: "bg-orange-50", accent: "bg-orange-400", label: "text-orange-700" },
+    "AUTOR": { bg: "bg-cyan-50", accent: "bg-cyan-400", label: "text-cyan-700" },
+    "ESCRIVÃO(Ã)": { bg: "bg-gray-50", accent: "bg-gray-400", label: "text-gray-600" },
 };
 
-const DEFAULT_COLOR = { bg: "bg-red-50", text: "text-red-800", border: "border-red-200" };
+const DEFAULT_COLOR = { bg: "bg-red-50", accent: "bg-red-400", label: "text-red-700" };
 
 function getSpeakerColor(label: string) {
     return SPEAKER_COLORS[label] ?? DEFAULT_COLOR;
 }
 
 function formatTimestamp(seconds: number): string {
-    const m = Math.floor(seconds / 60);
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
     const s = Math.floor(seconds % 60);
+    if (h > 0) {
+        return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+    }
     return `${m}:${String(s).padStart(2, "0")}`;
 }
 
@@ -53,52 +57,59 @@ export function TranscriptPanel({
         }
     }, [activeUtteranceId]);
 
+    let lastSpeaker = "";
+
     return (
-        <div className="space-y-2">
+        <div className="transcript-continuous">
             {utterances.map((utterance) => {
                 const isActive = utterance.id === activeUtteranceId;
                 const color = getSpeakerColor(utterance.speaker_label);
+                const isNewSpeaker = utterance.speaker_label !== lastSpeaker;
+                lastSpeaker = utterance.speaker_label;
 
                 return (
-                    <div
-                        key={utterance.id}
-                        ref={isActive ? activeRef : undefined}
-                        className={`group cursor-pointer rounded-lg border p-3 transition-all duration-200 ${isActive
-                                ? `${color.border} ${color.bg} shadow-md ring-1 ${color.border}`
-                                : "border-border bg-white hover:border-primary/20 hover:bg-red-50/30 hover:shadow-sm"
-                            }`}
-                        onClick={() => onUtteranceClick(utterance.start_time)}
-                    >
-                        {/* Header: speaker + timestamp */}
-                        <div className="mb-1.5 flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                                <div className={`flex h-6 items-center gap-1 rounded-md border px-2 text-xs font-semibold ${color.bg} ${color.text} ${color.border}`}>
-                                    <User className="h-3 w-3" />
+                    <div key={utterance.id} ref={isActive ? activeRef : undefined}>
+                        {/* Speaker divider — aparece só quando o locutor muda */}
+                        {isNewSpeaker && (
+                            <div className="flex items-center gap-2 px-4 pt-3 pb-1">
+                                <div className={`h-3 w-1 rounded-full ${color.accent}`} />
+                                <span className={`text-xs font-bold uppercase tracking-wide ${color.label}`}>
                                     {utterance.speaker_label}
-                                </div>
+                                </span>
+                                <button
+                                    className="ml-auto flex items-center gap-0.5 text-[10px] text-muted-foreground/60 hover:text-muted-foreground transition-colors"
+                                    onClick={() => onUtteranceClick(utterance.start_time)}
+                                >
+                                    <Clock className="h-2.5 w-2.5" />
+                                    {formatTimestamp(utterance.start_time)}
+                                </button>
                             </div>
-                            <button
-                                className={`flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs transition-colors ${isActive
-                                        ? `${color.text}`
-                                        : "text-muted-foreground group-hover:text-foreground"
-                                    }`}
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    onUtteranceClick(utterance.start_time);
-                                }}
-                            >
-                                <Clock className="h-3 w-3" />
-                                {formatTimestamp(utterance.start_time)}
-                            </button>
-                        </div>
+                        )}
 
-                        {/* Text */}
-                        <p
-                            className={`text-sm leading-relaxed ${isActive ? "text-foreground font-medium" : "text-foreground/80"
+                        {/* Texto da fala */}
+                        <div
+                            className={`cursor-pointer px-4 py-1 transition-all duration-150 border-l-2 ${isActive
+                                    ? `${color.bg} border-l-2 ${color.accent.replace("bg-", "border-")} font-medium`
+                                    : "border-transparent hover:bg-gray-50/60"
                                 }`}
+                            onClick={() => onUtteranceClick(utterance.start_time)}
                         >
-                            {utterance.text}
-                        </p>
+                            <p className={`text-sm leading-relaxed ${isActive ? "text-foreground" : "text-foreground/75"
+                                }`}>
+                                {!isNewSpeaker && (
+                                    <button
+                                        className="mr-1.5 inline-flex items-center gap-0.5 text-[10px] text-muted-foreground/40 hover:text-muted-foreground transition-colors align-baseline"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            onUtteranceClick(utterance.start_time);
+                                        }}
+                                    >
+                                        {formatTimestamp(utterance.start_time)}
+                                    </button>
+                                )}
+                                {utterance.text}
+                            </p>
+                        </div>
                     </div>
                 );
             })}

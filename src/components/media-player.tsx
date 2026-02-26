@@ -47,81 +47,86 @@ export const MediaPlayer = forwardRef<HTMLVideoElement | HTMLAudioElement, Media
         const skipForward = () => onSeek(Math.min(duration, currentTime + 10));
 
         return (
-            <div className="rounded-xl border border-border bg-white p-4 shadow-sm">
-                {/* Media element */}
-                {isVideo ? (
-                    <video
-                        ref={ref as React.Ref<HTMLVideoElement>}
-                        src={src}
-                        preload="metadata"
-                        className="mb-4 w-full rounded-lg bg-black"
-                    />
-                ) : (
-                    <audio
-                        ref={ref as React.Ref<HTMLAudioElement>}
-                        src={src}
-                        preload="metadata"
-                    />
-                )}
-
-                {/* Progress bar */}
-                <div
-                    className="group relative h-10 cursor-pointer rounded-lg bg-gray-100 overflow-hidden mb-4"
-                    onClick={handleProgressClick}
-                >
-                    {/* Progress fill */}
-                    <div
-                        className="absolute inset-y-0 left-0 gradient-primary opacity-20 transition-all"
-                        style={{ width: `${progress}%` }}
-                    />
-                    {/* Playhead */}
-                    <div
-                        className="absolute top-0 bottom-0 w-0.5 bg-primary shadow-sm transition-all"
-                        style={{ left: `${progress}%` }}
-                    />
-                    {/* Time overlay */}
-                    <div className="absolute inset-0 flex items-center justify-between px-3 text-xs text-muted-foreground">
-                        <span className="font-mono">{formatTime(currentTime)}</span>
-                        <span className="font-mono">{formatTime(duration)}</span>
-                    </div>
+            <div className="flex h-full flex-col rounded-xl border border-border bg-white shadow-sm overflow-hidden">
+                {/* Media element — ocupa o espaço disponível */}
+                <div className="flex-1 min-h-0 bg-black flex items-center justify-center">
+                    {isVideo ? (
+                        <video
+                            ref={ref as React.Ref<HTMLVideoElement>}
+                            src={src}
+                            preload="metadata"
+                            className="h-full w-full object-contain"
+                        />
+                    ) : (
+                        <div className="flex flex-col items-center gap-3 text-white/60">
+                            <Volume2 className="h-12 w-12" />
+                            <p className="text-sm">Áudio</p>
+                            <audio
+                                ref={ref as React.Ref<HTMLAudioElement>}
+                                src={src}
+                                preload="metadata"
+                            />
+                        </div>
+                    )}
                 </div>
 
-                {/* Controls */}
-                <div className="flex items-center justify-center gap-2">
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={skipBack}
-                        className="text-muted-foreground hover:text-foreground"
-                        title="Voltar 10s"
+                {/* Controls bar */}
+                <div className="p-3 space-y-2">
+                    {/* Progress bar */}
+                    <div
+                        className="group relative h-8 cursor-pointer rounded-lg bg-gray-100 overflow-hidden"
+                        onClick={handleProgressClick}
                     >
-                        <SkipBack className="h-4 w-4" />
-                    </Button>
+                        {/* Progress fill */}
+                        <div
+                            className="absolute inset-y-0 left-0 gradient-primary opacity-15 transition-all"
+                            style={{ width: `${progress}%` }}
+                        />
+                        {/* Playhead */}
+                        <div
+                            className="absolute top-0 bottom-0 w-0.5 bg-primary shadow-sm transition-all"
+                            style={{ left: `${progress}%` }}
+                        />
+                        {/* Time overlay */}
+                        <div className="absolute inset-0 flex items-center justify-between px-3 text-xs text-muted-foreground">
+                            <span className="font-mono">{formatTime(currentTime)}</span>
+                            <span className="font-mono">{formatTime(duration)}</span>
+                        </div>
+                    </div>
 
-                    <Button
-                        onClick={onTogglePlay}
-                        className="h-10 w-10 rounded-full gradient-primary text-white shadow-md hover:shadow-lg"
-                        size="icon"
-                    >
-                        {isPlaying ? (
-                            <Pause className="h-5 w-5" />
-                        ) : (
-                            <Play className="h-5 w-5 ml-0.5" />
-                        )}
-                    </Button>
+                    {/* Buttons */}
+                    <div className="flex items-center justify-center gap-1">
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={skipBack}
+                            className="text-muted-foreground hover:text-foreground h-8 w-8 p-0"
+                            title="Voltar 10s"
+                        >
+                            <SkipBack className="h-4 w-4" />
+                        </Button>
 
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={skipForward}
-                        className="text-muted-foreground hover:text-foreground"
-                        title="Avançar 10s"
-                    >
-                        <SkipForward className="h-4 w-4" />
-                    </Button>
+                        <Button
+                            onClick={onTogglePlay}
+                            className="h-9 w-9 rounded-full gradient-primary text-white shadow-md hover:shadow-lg"
+                            size="icon"
+                        >
+                            {isPlaying ? (
+                                <Pause className="h-4 w-4" />
+                            ) : (
+                                <Play className="h-4 w-4 ml-0.5" />
+                            )}
+                        </Button>
 
-                    <div className="ml-4 flex items-center gap-1.5 text-muted-foreground">
-                        <Volume2 className="h-4 w-4" />
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={skipForward}
+                            className="text-muted-foreground hover:text-foreground h-8 w-8 p-0"
+                            title="Avançar 10s"
+                        >
+                            <SkipForward className="h-4 w-4" />
+                        </Button>
                     </div>
                 </div>
             </div>
