@@ -5,6 +5,7 @@ import { createServerClient } from "@/lib/supabase-server";
 interface CreateTranscriptionInput {
     title: string;
     glossary: string | null;
+    engine: "whisper" | "deepgram";
 }
 
 export async function createTranscriptionAction(input: CreateTranscriptionInput) {
@@ -24,6 +25,7 @@ export async function createTranscriptionAction(input: CreateTranscriptionInput)
             user_id: user.id,
             title: input.title,
             glossary: input.glossary || null,
+            engine: input.engine,
             status: "uploading",
         })
         .select("id")
@@ -74,6 +76,31 @@ export async function updateTranscriptionStatus(
     if (error) {
         console.error("Error updating transcription status:", error);
         return { error: "Erro ao atualizar status." };
+    }
+
+    return { success: true };
+}
+
+export async function deleteTranscriptionAction(id: string) {
+    const supabase = await createServerClient();
+
+    const {
+        data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+        return { error: "Não autenticado." };
+    }
+
+    const { error } = await supabase
+        .from("transcriptions")
+        .delete()
+        .eq("id", id)
+        .eq("user_id", user.id);
+
+    if (error) {
+        console.error("Error deleting transcription:", error);
+        return { error: "Erro ao apagar degravação." };
     }
 
     return { success: true };

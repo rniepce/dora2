@@ -59,7 +59,7 @@ export default async function DashboardPage() {
                     </Link>
                 </EmptyState>
             ) : (
-                <div className="grid gap-4">
+                <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
                     {items.map((t) => (
                         <TranscriptionCard key={t.id} transcription={t} />
                     ))}

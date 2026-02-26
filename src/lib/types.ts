@@ -35,6 +35,7 @@ export interface Transcription {
     status: TranscriptionStatus;
     media_url: string | null;
     glossary: string | null;
+    engine: "whisper" | "deepgram";
     created_at: string;
     updated_at: string;
     // Relação opcional (join)

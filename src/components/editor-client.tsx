@@ -1,10 +1,16 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Scale } from "lucide-react";
+import { ArrowLeft, Scale, Download, Loader2, FileText, FileDown } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { MediaPlayer } from "@/components/media-player";
 import { TranscriptPanel } from "@/components/transcript-panel";
 import { VideoSummary } from "@/components/video-summary";
@@ -19,6 +25,33 @@ interface EditorClientProps {
 
 export function EditorClient({ transcription, utterances }: EditorClientProps) {
     const router = useRouter();
+    const [exporting, setExporting] = useState<"docx" | "pdf" | null>(null);
+
+    const handleExport = useCallback(async (format: "docx" | "pdf") => {
+        setExporting(format);
+        try {
+            const endpoint = format === "docx" ? "/api/export" : "/api/export-pdf";
+            const res = await fetch(`${endpoint}?id=${transcription.id}`);
+            if (!res.ok) throw new Error("Falha ao exportar");
+            const blob = await res.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            const safeName = transcription.title
+                .replace(/[^a-zA-Z0-9\u00c0-\u00ff\s.-]/g, "")
+                .replace(/\s+/g, "_");
+            a.download = `${safeName}_degravacao.${format}`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        } catch (err) {
+            console.error(err);
+            alert("Erro ao exportar degravação.");
+        } finally {
+            setExporting(null);
+        }
+    }, [transcription.id, transcription.title]);
 
     const {
         mediaRef,
@@ -62,6 +95,42 @@ export function EditorClient({ transcription, utterances }: EditorClientProps) {
                             {transcription.title}
                         </h1>
                     </div>
+
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                disabled={exporting !== null}
+                                className="ml-auto shrink-0 gap-1.5 text-xs"
+                            >
+                                {exporting ? (
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                ) : (
+                                    <Download className="h-3.5 w-3.5" />
+                                )}
+                                {exporting ? "Exportando..." : "Exportar"}
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-44">
+                            <DropdownMenuItem
+                                onClick={() => handleExport("docx")}
+                                disabled={exporting !== null}
+                                className="cursor-pointer gap-2"
+                            >
+                                <FileText className="h-4 w-4 text-blue-500" />
+                                <span>Documento (.docx)</span>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                                onClick={() => handleExport("pdf")}
+                                disabled={exporting !== null}
+                                className="cursor-pointer gap-2"
+                            >
+                                <FileDown className="h-4 w-4 text-red-500" />
+                                <span>PDF (.pdf)</span>
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
                 </div>
             </header>
 

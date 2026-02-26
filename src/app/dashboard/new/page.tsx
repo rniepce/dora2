@@ -11,6 +11,8 @@ import {
     AlertCircle,
     ArrowLeft,
     X,
+    Mic,
+    AudioLines,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -50,6 +52,7 @@ export default function NewTranscriptionPage() {
     // Form
     const [title, setTitle] = useState("");
     const [glossary, setGlossary] = useState("");
+    const [engine, setEngine] = useState<"whisper" | "deepgram">("deepgram");
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
     // Pipeline
@@ -134,6 +137,7 @@ export default function NewTranscriptionPage() {
             const result = await createTranscriptionAction({
                 title: title.trim(),
                 glossary: glossary.trim() || null,
+                engine,
             });
 
             if (result.error || !result.id) {
@@ -181,7 +185,7 @@ export default function NewTranscriptionPage() {
             fetch("/api/process", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ transcriptionId: result.id }),
+                body: JSON.stringify({ transcriptionId: result.id, engine }),
             }).catch((err) => {
                 console.error("Process error:", err);
             });
@@ -199,7 +203,7 @@ export default function NewTranscriptionPage() {
                 description: err instanceof Error ? err.message : "Erro inesperado.",
             });
         }
-    }, [selectedFile, title, glossary, router]);
+    }, [selectedFile, title, glossary, engine, router]);
 
     return (
         <div>
@@ -259,7 +263,7 @@ export default function NewTranscriptionPage() {
                                     {progress >= 25 ? "✓" : progress >= 15 ? "◌" : "○"} Conversão
                                 </div>
                                 <div className={progress >= 55 ? "text-foreground font-medium" : "text-muted-foreground"}>
-                                    {progress >= 55 ? "✓" : progress >= 35 ? "◌" : "○"} Whisper
+                                    {progress >= 55 ? "✓" : progress >= 35 ? "◌" : "○"} {engine === "deepgram" ? "Deepgram" : "Whisper"}
                                 </div>
                                 <div className={progress >= 100 ? "text-foreground font-medium" : "text-muted-foreground"}>
                                     {progress >= 100 ? "✓" : progress >= 70 ? "◌" : "○"} IA Format
@@ -314,6 +318,52 @@ export default function NewTranscriptionPage() {
                             <p className="text-xs text-muted-foreground">
                                 Esses termos melhoram a precisão da transcrição.
                             </p>
+                        </div>
+
+                        {/* Engine selector */}
+                        <div className="space-y-2">
+                            <Label>Motor de Transcrição</Label>
+                            <div className="grid grid-cols-2 gap-3">
+                                <button
+                                    type="button"
+                                    onClick={() => setEngine("whisper")}
+                                    disabled={isProcessing || isDone}
+                                    className={`flex flex-col items-center gap-2 rounded-xl border-2 p-4 text-center transition-all ${engine === "whisper"
+                                        ? "border-primary bg-red-50/50 shadow-sm"
+                                        : "border-border hover:border-primary/30 hover:bg-gray-50"
+                                        }`}
+                                >
+                                    <Mic className={`h-6 w-6 ${engine === "whisper" ? "text-primary" : "text-muted-foreground"}`} />
+                                    <div>
+                                        <p className={`text-sm font-semibold ${engine === "whisper" ? "text-foreground" : "text-muted-foreground"}`}>
+                                            Azure Whisper
+                                        </p>
+                                        <p className="mt-0.5 text-[11px] text-muted-foreground">
+                                            Modelo generalista OpenAI
+                                        </p>
+                                    </div>
+                                </button>
+
+                                <button
+                                    type="button"
+                                    onClick={() => setEngine("deepgram")}
+                                    disabled={isProcessing || isDone}
+                                    className={`flex flex-col items-center gap-2 rounded-xl border-2 p-4 text-center transition-all ${engine === "deepgram"
+                                        ? "border-primary bg-red-50/50 shadow-sm"
+                                        : "border-border hover:border-primary/30 hover:bg-gray-50"
+                                        }`}
+                                >
+                                    <AudioLines className={`h-6 w-6 ${engine === "deepgram" ? "text-primary" : "text-muted-foreground"}`} />
+                                    <div>
+                                        <p className={`text-sm font-semibold ${engine === "deepgram" ? "text-foreground" : "text-muted-foreground"}`}>
+                                            Deepgram Nova-3
+                                        </p>
+                                        <p className="mt-0.5 text-[11px] text-muted-foreground">
+                                            Alta precisão + diarização nativa
+                                        </p>
+                                    </div>
+                                </button>
+                            </div>
                         </div>
 
                         <Separator />

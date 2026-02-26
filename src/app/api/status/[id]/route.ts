@@ -21,7 +21,7 @@ export async function GET(
 
         const { data, error } = await supabase
             .from("transcriptions")
-            .select("status, progress, title")
+            .select("status, progress, title, engine")
             .eq("id", id)
             .single();
 
@@ -29,10 +29,12 @@ export async function GET(
             return NextResponse.json({ error: "Não encontrado" }, { status: 404 });
         }
 
+        const engineLabel = data.engine === "deepgram" ? "Deepgram Nova-3" : "Whisper";
+
         // Mapear status para label e progresso estimado (fallback se progress for null)
         const statusMap: Record<string, { label: string; fallbackProgress: number }> = {
             uploading: { label: "Enviando arquivo...", fallbackProgress: 10 },
-            transcribing: { label: "Transcrevendo com Whisper...", fallbackProgress: 40 },
+            transcribing: { label: `Transcrevendo com ${engineLabel}...`, fallbackProgress: 40 },
             formatting: { label: "Formatando com IA...", fallbackProgress: 75 },
             completed: { label: "Concluído!", fallbackProgress: 100 },
             error: { label: "Erro no processamento", fallbackProgress: 0 },

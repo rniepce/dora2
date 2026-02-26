@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Scale, Plus, LogOut } from "lucide-react";
+import { Scale, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase";
 
@@ -35,15 +35,6 @@ export function DashboardHeader({ userName }: DashboardHeaderProps) {
 
                 {/* Actions */}
                 <div className="flex items-center gap-3">
-                    <Link href="/dashboard/new">
-                        <Button
-                            size="sm"
-                            className="gradient-primary font-semibold text-white shadow-md"
-                        >
-                            <Plus className="mr-1.5 h-4 w-4" />
-                            Nova Degravação
-                        </Button>
-                    </Link>
 
                     <span className="text-sm text-muted-foreground">{userName}</span>
 

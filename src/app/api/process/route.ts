@@ -2,17 +2,15 @@ import { NextResponse } from "next/server";
 
 /**
  * POST /api/process
- * Body: { transcriptionId: string }
+ * Body: { transcriptionId: string, engine?: "whisper" | "deepgram" }
  *
  * Orquestra o pipeline completo:
- * 1. Chama /api/transcribe (Deepgram)
+ * 1. Chama /api/transcribe ou /api/transcribe-deepgram
  * 2. Chama /api/format (LLM)
- *
- * O upload page chama esta rota após o upload do áudio para Storage.
  */
 export async function POST(request: Request) {
     try {
-        const { transcriptionId } = await request.json();
+        const { transcriptionId, engine = "whisper" } = await request.json();
 
         if (!transcriptionId) {
             return NextResponse.json({ error: "transcriptionId é obrigatório" }, { status: 400 });
@@ -20,8 +18,13 @@ export async function POST(request: Request) {
 
         const origin = new URL(request.url).origin;
 
-        // 1. Transcrição com Deepgram
-        const transcribeRes = await fetch(`${origin}/api/transcribe`, {
+        // 1. Transcrição — rota depende do engine
+        const transcribeEndpoint =
+            engine === "deepgram" ? "/api/transcribe-deepgram" : "/api/transcribe";
+
+        console.log(`Processing with engine: ${engine} → ${transcribeEndpoint}`);
+
+        const transcribeRes = await fetch(`${origin}${transcribeEndpoint}`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ transcriptionId }),
@@ -56,6 +59,7 @@ export async function POST(request: Request) {
 
         return NextResponse.json({
             success: true,
+            engine,
             transcribe: transcribeData,
             format: formatData,
         });
