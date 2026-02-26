@@ -28,10 +28,16 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: "Nenhuma fala encontrada" }, { status: 404 });
         }
 
-        // Montar texto da transcrição
-        const transcriptText = utterances
+        // Montar texto da transcrição (truncar se muito longo para evitar timeout)
+        let transcriptText = utterances
             .map((u: { speaker_label: string; text: string }) => `[${u.speaker_label}]: ${u.text}`)
             .join("\n");
+
+        const MAX_CHARS = 12000;
+        if (transcriptText.length > MAX_CHARS) {
+            console.log(`[Summarize] Truncating transcript from ${transcriptText.length} to ${MAX_CHARS} chars`);
+            transcriptText = transcriptText.substring(0, MAX_CHARS) + "\n\n[... transcrição truncada para resumo ...]";
+        }
 
         const endpoint = process.env.AZURE_OPENAI_ENDPOINT!;
         const apiKey = process.env.AZURE_OPENAI_API_KEY!;
@@ -49,6 +55,9 @@ Analise a transcrição abaixo de uma audiência judicial e produza um resumo es
 
 Seja objetivo e direto. Use linguagem jurídica adequada, mas acessível. O resumo deve ter no máximo 500 palavras.`;
 
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 120000);
+
         const llmRes = await fetch(chatUrl, {
             method: "POST",
             headers: {
@@ -62,7 +71,10 @@ Seja objetivo e direto. Use linguagem jurídica adequada, mas acessível. O resu
                 ],
                 max_completion_tokens: 2000,
             }),
+            signal: controller.signal,
         });
+
+        clearTimeout(timeoutId);
 
         if (!llmRes.ok) {
             const errText = await llmRes.text();
