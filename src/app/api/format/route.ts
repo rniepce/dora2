@@ -1,6 +1,4 @@
 import { NextResponse } from "next/server";
-import { createAzure } from "@ai-sdk/azure";
-import { generateText } from "ai";
 import { createServerClient } from "@/lib/supabase-server";
 
 /**
@@ -62,10 +60,9 @@ export async function POST(request: Request) {
             batches.push(utterancesForLLM.slice(i, i + BATCH_SIZE));
         }
 
-        const azure = createAzure({
-            baseURL: `${process.env.AZURE_OPENAI_ENDPOINT!}/openai/deployments`,
-            apiKey: process.env.AZURE_OPENAI_API_KEY!,
-        });
+        const endpoint = process.env.AZURE_OPENAI_ENDPOINT!;
+        const apiKey = process.env.AZURE_OPENAI_API_KEY!;
+        const chatUrl = `${endpoint}/openai/deployments/gpt-5.2-chat/chat/completions?api-version=2024-06-01`;
 
         // Helper para atualizar progresso
         const updateProgress = async (progress: number, status?: string) => {
@@ -81,13 +78,30 @@ export async function POST(request: Request) {
             const systemPrompt = buildSystemPrompt(glossary);
             const userPrompt = JSON.stringify(batch, null, 2);
 
-            const { text: llmResponse } = await generateText({
-                model: azure("gpt-5.2-chat"),
-                system: systemPrompt,
-                prompt: userPrompt,
-                temperature: 0.2,
-                maxOutputTokens: 8000,
+            const llmRes = await fetch(chatUrl, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "api-key": apiKey,
+                },
+                body: JSON.stringify({
+                    messages: [
+                        { role: "system", content: systemPrompt },
+                        { role: "user", content: userPrompt },
+                    ],
+                    temperature: 0.2,
+                    max_tokens: 8000,
+                }),
             });
+
+            if (!llmRes.ok) {
+                const errText = await llmRes.text();
+                console.error("LLM API error:", errText);
+                continue;
+            }
+
+            const llmData = await llmRes.json();
+            const llmResponse = llmData.choices?.[0]?.message?.content ?? "";
 
             // Parsear a resposta do LLM
             const parsed = parseLLMResponse(llmResponse);
