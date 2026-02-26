@@ -11,18 +11,13 @@ interface CreateTranscriptionInput {
 export async function createTranscriptionAction(input: CreateTranscriptionInput) {
     const supabase = await createServerClient();
 
-    const {
-        data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-        return { error: "Não autenticado." };
-    }
+    // Modo teste: user_id fixo (sem autenticação)
+    const TEST_USER_ID = "00000000-0000-0000-0000-000000000000";
 
     const { data, error } = await supabase
         .from("transcriptions")
         .insert({
-            user_id: user.id,
+            user_id: TEST_USER_ID,
             title: input.title,
             glossary: input.glossary || null,
             status: "uploading",

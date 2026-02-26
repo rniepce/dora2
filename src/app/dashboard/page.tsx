@@ -9,6 +9,7 @@ import type { Transcription } from "@/lib/types";
 export default async function DashboardPage() {
     const supabase = await createServerClient();
 
+    // Buscar TODAS as degravações (sem filtro de user_id para modo teste)
     const { data: transcriptions, error } = await supabase
         .from("transcriptions")
         .select("*")
@@ -23,35 +24,42 @@ export default async function DashboardPage() {
 
     return (
         <div>
-            {/* Page header */}
-            <div className="mb-8">
-                <h1 className="text-3xl font-bold tracking-tight text-foreground">
-                    Minhas Degravações
-                </h1>
-                <p className="mt-1 text-muted-foreground">
-                    {items.length > 0
-                        ? `${items.length} degravação${items.length > 1 ? "ões" : ""} encontrada${items.length > 1 ? "s" : ""}`
-                        : "Gerencie suas transcrições de audiências judiciais"}
-                </p>
+            <div className="mb-8 flex items-center justify-between">
+                <div>
+                    <h1 className="text-3xl font-bold tracking-tight text-foreground">
+                        Degravações
+                    </h1>
+                    <p className="mt-1 text-muted-foreground">
+                        {items.length === 0
+                            ? "Nenhuma degravação ainda"
+                            : `${items.length} degravação${items.length !== 1 ? "ões" : ""}`}
+                    </p>
+                </div>
+
+                <Link href="/dashboard/new">
+                    <Button className="gradient-primary font-semibold text-primary-foreground shadow-lg shadow-primary/25">
+                        <Plus className="mr-2 h-4 w-4" />
+                        Nova Degravação
+                    </Button>
+                </Link>
             </div>
 
-            {/* Transcription list or empty state */}
             {items.length === 0 ? (
-                <EmptyState>
+                <EmptyState
+                    title="Nenhuma degravação"
+                    description="Comece enviando um áudio ou vídeo de audiência."
+                >
                     <Link href="/dashboard/new">
-                        <Button className="gradient-primary font-semibold text-primary-foreground shadow-md shadow-primary/20">
-                            <Plus className="mr-1.5 h-4 w-4" />
+                        <Button className="gradient-primary font-semibold text-primary-foreground shadow-lg shadow-primary/25">
+                            <Plus className="mr-2 h-4 w-4" />
                             Nova Degravação
                         </Button>
                     </Link>
                 </EmptyState>
             ) : (
-                <div className="space-y-3">
-                    {items.map((transcription) => (
-                        <TranscriptionCard
-                            key={transcription.id}
-                            transcription={transcription}
-                        />
+                <div className="grid gap-4">
+                    {items.map((t) => (
+                        <TranscriptionCard key={t.id} transcription={t} />
                     ))}
                 </div>
             )}
