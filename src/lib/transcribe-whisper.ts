@@ -168,11 +168,15 @@ async function callWhisperAPI(
     audioBuffer: Buffer,
     filename: string
 ): Promise<Array<{ text: string; start: number; end: number }>> {
-    const endpoint = process.env.AZURE_OPENAI_ENDPOINT!;
-    const apiKey = process.env.AZURE_OPENAI_API_KEY!;
+    const endpoint = process.env.AZURE_OPENAI_ENDPOINT;
+    const apiKey = process.env.AZURE_OPENAI_API_KEY;
+
+    if (!endpoint || !apiKey) {
+        throw new Error("AZURE_OPENAI_ENDPOINT ou AZURE_OPENAI_API_KEY não configurados");
+    }
+
     const whisperUrl = `${endpoint}/openai/deployments/whisper/audio/transcriptions?api-version=2024-06-01`;
 
-    // Usar File (Node 20+) em vez de Blob para melhor compatibilidade
     const file = new File([new Uint8Array(audioBuffer)], filename, { type: "audio/mpeg" });
 
     const formData = new FormData();
@@ -181,28 +185,44 @@ async function callWhisperAPI(
     formData.append("language", "pt");
     formData.append("timestamp_granularities[]", "segment");
 
-    console.log(`[Whisper] Sending ${(audioBuffer.length / 1024 / 1024).toFixed(1)}MB to ${whisperUrl}...`);
+    console.log(`[Whisper] Sending ${(audioBuffer.length / 1024 / 1024).toFixed(1)}MB to Azure Whisper...`);
+    console.log(`[Whisper] Endpoint: ${endpoint}`);
 
-    const res = await fetch(whisperUrl, {
-        method: "POST",
-        headers: { "api-key": apiKey },
-        body: formData,
-    });
+    // 5 min timeout para áudios longos
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 300000);
 
-    if (!res.ok) {
-        const errorText = await res.text();
-        console.error("[Whisper] API error:", res.status, errorText);
-        throw new Error(`Whisper API ${res.status}: ${errorText.substring(0, 200)}`);
+    try {
+        const res = await fetch(whisperUrl, {
+            method: "POST",
+            headers: { "api-key": apiKey },
+            body: formData,
+            signal: controller.signal,
+        });
+
+        clearTimeout(timeoutId);
+
+        if (!res.ok) {
+            const errorText = await res.text();
+            console.error("[Whisper] API error:", res.status, errorText);
+            throw new Error(`Whisper API ${res.status}: ${errorText.substring(0, 300)}`);
+        }
+
+        const data = await res.json();
+        console.log(`[Whisper] OK — segments: ${data.segments?.length ?? 0}, text: ${data.text?.length ?? 0} chars`);
+
+        const segments: Array<{ id: number; text: string; start: number; end: number }> = data.segments ?? [];
+
+        if (segments.length === 0 && data.text) {
+            return [{ text: data.text.trim(), start: 0, end: data.duration ?? 0 }];
+        }
+
+        return segments.map((seg) => ({ text: seg.text, start: seg.start, end: seg.end }));
+    } catch (err) {
+        clearTimeout(timeoutId);
+        if (err instanceof Error && err.name === "AbortError") {
+            throw new Error("Whisper API timeout (5 min) — áudio pode ser muito longo");
+        }
+        throw err;
     }
-
-    const data = await res.json();
-    console.log(`[Whisper] Response received, segments: ${data.segments?.length ?? 0}, text length: ${data.text?.length ?? 0}`);
-
-    const segments: Array<{ id: number; text: string; start: number; end: number }> = data.segments ?? [];
-
-    if (segments.length === 0 && data.text) {
-        return [{ text: data.text.trim(), start: 0, end: data.duration ?? 0 }];
-    }
-
-    return segments.map((seg) => ({ text: seg.text, start: seg.start, end: seg.end }));
 }

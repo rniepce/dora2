@@ -92,6 +92,18 @@ export async function deleteTranscriptionAction(id: string) {
         return { error: "Não autenticado." };
     }
 
+    // Deletar utterances primeiro (FK constraint)
+    const { error: uttError } = await supabase
+        .from("utterances")
+        .delete()
+        .eq("transcription_id", id);
+
+    if (uttError) {
+        console.error("Error deleting utterances:", uttError);
+        // Continuar mesmo se falhar — pode não ter utterances
+    }
+
+    // Deletar a transcrição
     const { error } = await supabase
         .from("transcriptions")
         .delete()
