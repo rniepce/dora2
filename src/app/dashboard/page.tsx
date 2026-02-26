@@ -8,11 +8,13 @@ import type { Transcription } from "@/lib/types";
 
 export default async function DashboardPage() {
     const supabase = await createServerClient();
+    const { data: { user } } = await supabase.auth.getUser();
 
-    // Buscar TODAS as degravações (sem filtro de user_id para modo teste)
+    // Buscar degravações do usuário logado
     const { data: transcriptions, error } = await supabase
         .from("transcriptions")
         .select("*")
+        .eq("user_id", user!.id)
         .order("created_at", { ascending: false })
         .returns<Transcription[]>();
 
@@ -37,7 +39,7 @@ export default async function DashboardPage() {
                 </div>
 
                 <Link href="/dashboard/new">
-                    <Button className="gradient-primary font-semibold text-primary-foreground shadow-lg shadow-primary/25">
+                    <Button className="gradient-primary font-semibold text-white shadow-md">
                         <Plus className="mr-2 h-4 w-4" />
                         Nova Degravação
                     </Button>
@@ -50,7 +52,7 @@ export default async function DashboardPage() {
                     description="Comece enviando um áudio ou vídeo de audiência."
                 >
                     <Link href="/dashboard/new">
-                        <Button className="gradient-primary font-semibold text-primary-foreground shadow-lg shadow-primary/25">
+                        <Button className="gradient-primary font-semibold text-white shadow-md">
                             <Plus className="mr-2 h-4 w-4" />
                             Nova Degravação
                         </Button>

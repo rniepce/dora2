@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import {
     Upload,
     FileVideo,
-    FileAudio,
     Music,
     Loader2,
     CheckCircle2,
@@ -23,7 +22,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 
-import { useFFmpeg, type FFmpegStatus } from "@/hooks/use-ffmpeg";
 import { createTranscriptionAction, updateTranscriptionMediaUrl } from "@/lib/actions/transcription";
 import { createClient } from "@/lib/supabase";
 
@@ -31,7 +29,7 @@ const ACCEPTED_VIDEO = ".mp4,.mkv,.avi,.mov,.webm,.flv,.wmv";
 const ACCEPTED_AUDIO = ".mp3,.wav,.ogg,.m4a,.aac,.flac,.wma";
 const ACCEPTED_ALL = `${ACCEPTED_VIDEO},${ACCEPTED_AUDIO}`;
 
-type UploadStep = "form" | "extracting" | "uploading" | "processing" | "done" | "error";
+type UploadStep = "form" | "uploading" | "processing" | "done" | "error";
 
 const AUDIO_EXTENSIONS = new Set([
     "mp3", "wav", "ogg", "m4a", "aac", "flac", "wma",
@@ -53,7 +51,6 @@ function formatBytes(bytes: number): string {
 export default function NewTranscriptionPage() {
     const router = useRouter();
     const fileInputRef = useRef<HTMLInputElement>(null);
-    const ffmpeg = useFFmpeg();
 
     // Form state
     const [title, setTitle] = useState("");
@@ -63,7 +60,6 @@ export default function NewTranscriptionPage() {
     // Pipeline state
     const [step, setStep] = useState<UploadStep>("form");
     const [uploadProgress, setUploadProgress] = useState(0);
-    const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
     const [errorMsg, setErrorMsg] = useState("");
 
     // ─── File selection ──────────────────────────────────────────────────────
@@ -87,31 +83,7 @@ export default function NewTranscriptionPage() {
         }
 
         try {
-            let finalAudioBlob: Blob;
-
-            // 1) Se é vídeo, extrair áudio com FFmpeg WASM
-            if (!isAudioFile(selectedFile.name)) {
-                setStep("extracting");
-
-                // Carrega FFmpeg se ainda não carregou
-                if (ffmpeg.status === "idle" || ffmpeg.status === "error") {
-                    await ffmpeg.load();
-                }
-
-                const extracted = await ffmpeg.extractAudio(selectedFile);
-                if (!extracted) {
-                    throw new Error(ffmpeg.error || "Erro ao extrair áudio do vídeo.");
-                }
-
-                finalAudioBlob = extracted;
-                setAudioBlob(extracted);
-            } else {
-                // Arquivo já é áudio, usar diretamente
-                finalAudioBlob = selectedFile;
-                setAudioBlob(selectedFile);
-            }
-
-            // 2) Criar registro no banco
+            // 1) Criar registro no banco
             const result = await createTranscriptionAction({
                 title: title.trim(),
                 glossary: glossary.trim() || null,
@@ -123,19 +95,20 @@ export default function NewTranscriptionPage() {
 
             const transcriptionId = result.id;
 
-            // 3) Upload para Supabase Storage
+            // 2) Upload direto para Supabase Storage
             setStep("uploading");
             setUploadProgress(10);
 
             const supabase = createClient();
-            const filePath = `${transcriptionId}/audio.mp3`;
+            const ext = selectedFile.name.split(".").pop()?.toLowerCase() ?? "mp3";
+            const filePath = `${transcriptionId}/media.${ext}`;
 
             setUploadProgress(30);
 
             const { error: uploadError } = await supabase.storage
                 .from("media")
-                .upload(filePath, finalAudioBlob, {
-                    contentType: "audio/mpeg",
+                .upload(filePath, selectedFile, {
+                    contentType: selectedFile.type || "audio/mpeg",
                     upsert: true,
                 });
 
@@ -143,9 +116,9 @@ export default function NewTranscriptionPage() {
                 throw new Error(`Upload falhou: ${uploadError.message}`);
             }
 
-            setUploadProgress(80);
+            setUploadProgress(70);
 
-            // 4) Pegar URL pública e atualizar o registro
+            // 3) Pegar URL pública e atualizar o registro
             const { data: urlData } = supabase.storage
                 .from("media")
                 .getPublicUrl(filePath);
@@ -161,7 +134,7 @@ export default function NewTranscriptionPage() {
 
             setUploadProgress(100);
 
-            // 5) Disparar pipeline de IA (transcrição + formatação)
+            // 4) Disparar pipeline de IA (transcrição + formatação)
             setStep("processing");
 
             toast.info("Upload concluído! Iniciando transcrição...", {
@@ -178,7 +151,7 @@ export default function NewTranscriptionPage() {
                 const err = await processRes.json();
                 console.error("Process pipeline error:", err);
                 toast.warning("Upload OK, mas o processamento falhou", {
-                    description: "Você pode tentar reprocessar depois.",
+                    description: err.error || "Você pode tentar reprocessar depois.",
                 });
             } else {
                 toast.success("Degravação concluída!", {
@@ -201,25 +174,21 @@ export default function NewTranscriptionPage() {
                 description: err instanceof Error ? err.message : "Erro inesperado.",
             });
         }
-    }, [selectedFile, title, glossary, ffmpeg, router]);
+    }, [selectedFile, title, glossary, router]);
 
     // ─── Progress display helpers ───────────────────────────────────────────
     const getOverallProgress = (): number => {
         if (step === "form") return 0;
-        if (step === "extracting") return Math.round(ffmpeg.progress * 0.4); // 0-40%
-        if (step === "uploading") return 40 + Math.round(uploadProgress * 0.2); // 40-60%
-        if (step === "processing") return 70; // indeterminate
+        if (step === "uploading") return Math.round(uploadProgress * 0.6); // 0-60%
+        if (step === "processing") return 70;
         if (step === "done") return 100;
         return 0;
     };
 
     const getStepLabel = (): string => {
         switch (step) {
-            case "extracting":
-                if (ffmpeg.status === "loading") return "Carregando FFmpeg...";
-                return `Extraindo áudio... ${ffmpeg.progress}%`;
             case "uploading":
-                return `Enviando áudio... ${uploadProgress}%`;
+                return `Enviando arquivo... ${uploadProgress}%`;
             case "processing":
                 return "Transcrevendo e formatando com IA...";
             case "done":
@@ -231,7 +200,7 @@ export default function NewTranscriptionPage() {
         }
     };
 
-    const isProcessing = step === "extracting" || step === "uploading" || step === "processing";
+    const isProcessing = step === "uploading" || step === "processing";
 
     return (
         <div>
@@ -258,14 +227,14 @@ export default function NewTranscriptionPage() {
 
                 {/* Progress bar (visible during processing) */}
                 {step !== "form" && (
-                    <Card className="mb-6 border-border/50 bg-card/60 backdrop-blur-sm">
+                    <Card className="mb-6 border-border bg-white shadow-sm">
                         <CardContent className="p-4">
                             <div className="mb-2 flex items-center justify-between text-sm">
                                 <span className="flex items-center gap-2 font-medium">
                                     {step === "done" ? (
-                                        <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                                        <CheckCircle2 className="h-4 w-4 text-green-600" />
                                     ) : step === "error" ? (
-                                        <AlertCircle className="h-4 w-4 text-red-400" />
+                                        <AlertCircle className="h-4 w-4 text-red-600" />
                                     ) : (
                                         <Loader2 className="h-4 w-4 animate-spin text-primary" />
                                     )}
@@ -277,24 +246,15 @@ export default function NewTranscriptionPage() {
                             </div>
                             <Progress value={getOverallProgress()} className="h-2" />
 
-                            {/* FFmpeg logs (collapsible) */}
-                            {step === "extracting" && ffmpeg.logs.length > 0 && (
-                                <div className="mt-3 max-h-24 overflow-y-auto rounded-md bg-background/50 p-2">
-                                    <pre className="text-xs text-muted-foreground">
-                                        {ffmpeg.logs.slice(-5).join("\n")}
-                                    </pre>
-                                </div>
-                            )}
-
                             {step === "error" && errorMsg && (
-                                <p className="mt-2 text-sm text-red-400">{errorMsg}</p>
+                                <p className="mt-2 text-sm text-red-600">{errorMsg}</p>
                             )}
                         </CardContent>
                     </Card>
                 )}
 
                 {/* Form */}
-                <Card className="border-border/50 bg-card/60 backdrop-blur-sm">
+                <Card className="border-border bg-white shadow-sm">
                     <CardHeader>
                         <CardTitle>Detalhes da Audiência</CardTitle>
                         <CardDescription>
@@ -311,7 +271,6 @@ export default function NewTranscriptionPage() {
                                 onChange={(e) => setTitle(e.target.value)}
                                 placeholder="Ex: Processo nº 12345-67.2024.8.13.0001"
                                 disabled={isProcessing || step === "done"}
-                                className="bg-background/50"
                             />
                         </div>
 
@@ -328,15 +287,15 @@ export default function NewTranscriptionPage() {
                                 placeholder="Nomes do juiz, partes, testemunhas, termos técnicos... (um por linha)"
                                 rows={3}
                                 disabled={isProcessing || step === "done"}
-                                className="bg-background/50 resize-none"
+                                className="resize-none"
                             />
                             <p className="text-xs text-muted-foreground">
-                                Esses termos serão usados como palavras-chave para melhorar a precisão
+                                Esses termos serão usados como contexto para melhorar a precisão
                                 da transcrição.
                             </p>
                         </div>
 
-                        <Separator className="bg-border/50" />
+                        <Separator />
 
                         {/* File upload */}
                         <div className="space-y-2">
@@ -344,10 +303,10 @@ export default function NewTranscriptionPage() {
 
                             {!selectedFile ? (
                                 <div
-                                    className="group cursor-pointer rounded-xl border-2 border-dashed border-border/60 bg-background/30 p-8 text-center transition-all hover:border-primary/50 hover:bg-primary/5"
+                                    className="group cursor-pointer rounded-xl border-2 border-dashed border-border p-8 text-center transition-all hover:border-primary/40 hover:bg-red-50/30"
                                     onClick={() => fileInputRef.current?.click()}
                                 >
-                                    <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary transition-colors group-hover:bg-primary/15">
+                                    <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-red-50 text-primary transition-colors group-hover:bg-red-100">
                                         <Upload className="h-6 w-6" />
                                     </div>
                                     <p className="font-medium text-foreground">
@@ -356,13 +315,10 @@ export default function NewTranscriptionPage() {
                                     <p className="mt-1 text-sm text-muted-foreground">
                                         Vídeo (MP4, MKV, AVI, MOV) ou Áudio (MP3, WAV, M4A)
                                     </p>
-                                    <p className="mt-0.5 text-xs text-muted-foreground/70">
-                                        Vídeos serão convertidos automaticamente — apenas o áudio será enviado
-                                    </p>
                                 </div>
                             ) : (
-                                <div className="flex items-center gap-3 rounded-xl border border-border/50 bg-background/30 p-4">
-                                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                                <div className="flex items-center gap-3 rounded-xl border border-border bg-gray-50 p-4">
+                                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-red-50 text-primary">
                                         {isAudioFile(selectedFile.name) ? (
                                             <Music className="h-5 w-5" />
                                         ) : (
@@ -375,11 +331,6 @@ export default function NewTranscriptionPage() {
                                         </p>
                                         <p className="text-xs text-muted-foreground">
                                             {formatBytes(selectedFile.size)}
-                                            {!isAudioFile(selectedFile.name) && (
-                                                <span className="ml-2 text-primary">
-                                                    → o áudio será extraído automaticamente
-                                                </span>
-                                            )}
                                         </p>
                                     </div>
                                     {!isProcessing && step !== "done" && (
@@ -409,7 +360,7 @@ export default function NewTranscriptionPage() {
                         <Button
                             onClick={handleSubmit}
                             disabled={!title.trim() || !selectedFile || isProcessing || step === "done"}
-                            className="w-full gradient-primary font-semibold text-primary-foreground shadow-lg shadow-primary/25 transition-all hover:shadow-xl hover:shadow-primary/30"
+                            className="w-full gradient-primary font-semibold text-white shadow-md hover:shadow-lg"
                             size="lg"
                         >
                             {isProcessing ? (

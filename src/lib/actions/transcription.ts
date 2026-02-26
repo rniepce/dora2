@@ -1,6 +1,5 @@
 "use server";
 
-import { redirect } from "next/navigation";
 import { createServerClient } from "@/lib/supabase-server";
 
 interface CreateTranscriptionInput {
@@ -11,13 +10,18 @@ interface CreateTranscriptionInput {
 export async function createTranscriptionAction(input: CreateTranscriptionInput) {
     const supabase = await createServerClient();
 
-    // Modo teste: user_id fixo (sem autenticação)
-    const TEST_USER_ID = "00000000-0000-0000-0000-000000000000";
+    const {
+        data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+        return { error: "Não autenticado." };
+    }
 
     const { data, error } = await supabase
         .from("transcriptions")
         .insert({
-            user_id: TEST_USER_ID,
+            user_id: user.id,
             title: input.title,
             glossary: input.glossary || null,
             status: "uploading",
