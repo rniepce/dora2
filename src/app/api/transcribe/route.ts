@@ -1,15 +1,15 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@deepgram/sdk";
 import { createServerClient } from "@/lib/supabase-server";
 
 /**
  * POST /api/transcribe
  * Body: { transcriptionId: string }
  *
- * 1. Busca a degravação no banco (pega media_url e glossary)
- * 2. Envia o áudio para Deepgram (nova-3, pt-BR, diarize, utterances)
- * 3. Salva as utterances no banco
- * 4. Atualiza o status para "formatting"
+ * 1. Busca a degravação no banco (pega media_url)
+ * 2. Baixa o áudio do Supabase Storage
+ * 3. Envia para Azure Whisper (segments com timestamps)
+ * 4. Salva as utterances no banco
+ * 5. Atualiza o status para "formatting"
  */
 export async function POST(request: Request) {
     try {
@@ -42,72 +42,74 @@ export async function POST(request: Request) {
             .update({ status: "transcribing", updated_at: new Date().toISOString() })
             .eq("id", transcriptionId);
 
-        // 2. Enviar para Deepgram
-        const deepgram = createClient(process.env.DEEPGRAM_API_KEY!);
+        // 2. Baixar o áudio do Supabase Storage
+        const audioResponse = await fetch(transcription.media_url);
+        if (!audioResponse.ok) {
+            throw new Error("Não foi possível baixar o áudio do Storage");
+        }
+        const audioBlob = await audioResponse.blob();
 
-        // Montar keywords do glossário
-        const keywords = transcription.glossary
-            ? transcription.glossary
-                .split(/[\n,;]+/)
-                .map((k: string) => k.trim())
-                .filter(Boolean)
-            : [];
+        // 3. Enviar para Azure Whisper
+        const endpoint = process.env.AZURE_OPENAI_ENDPOINT!;
+        const apiKey = process.env.AZURE_OPENAI_API_KEY!;
+        const whisperUrl = `${endpoint}/openai/deployments/whisper/audio/transcriptions?api-version=2024-06-01`;
 
-        const { result, error: dgError } = await deepgram.listen.prerecorded.transcribeUrl(
-            { url: transcription.media_url },
-            {
-                model: "nova-3",
-                language: "pt-BR",
-                diarize: true,
-                smart_format: true,
-                utterances: true,
-                keywords: keywords.length > 0 ? keywords : undefined,
-            }
-        );
+        const formData = new FormData();
+        formData.append("file", audioBlob, "audio.mp3");
+        formData.append("response_format", "verbose_json");
+        formData.append("language", "pt");
+        formData.append("timestamp_granularities[]", "segment");
 
-        if (dgError) {
-            console.error("Deepgram error:", dgError);
+        const whisperRes = await fetch(whisperUrl, {
+            method: "POST",
+            headers: {
+                "api-key": apiKey,
+            },
+            body: formData,
+        });
+
+        if (!whisperRes.ok) {
+            const errorText = await whisperRes.text();
+            console.error("Whisper API error:", errorText);
             await supabase
                 .from("transcriptions")
                 .update({ status: "error", updated_at: new Date().toISOString() })
                 .eq("id", transcriptionId);
-            return NextResponse.json({ error: `Deepgram: ${dgError.message}` }, { status: 500 });
+            return NextResponse.json({ error: `Whisper: ${errorText}` }, { status: 500 });
         }
 
-        // 3. Mapear utterances e salvar no banco
-        const dgUtterances = result?.results?.utterances ?? [];
+        const whisperData = await whisperRes.json();
 
-        if (dgUtterances.length === 0) {
-            // Fallback: se não retornou utterances, tenta extrair do channel
-            const channel = result?.results?.channels?.[0];
-            const alt = channel?.alternatives?.[0];
-            if (alt?.transcript) {
-                // Salva como utterance única
-                await supabase.from("utterances").insert({
-                    transcription_id: transcriptionId,
-                    speaker_label: "SPEAKER_00",
-                    text: alt.transcript,
-                    start_time: 0,
-                    end_time: alt.words?.[alt.words.length - 1]?.end ?? 0,
-                    words: alt.words ? JSON.stringify(alt.words) : null,
-                    sort_order: 0,
-                });
-            }
-        } else {
-            // Mapear cada utterance do Deepgram
-            const utterancesToInsert = dgUtterances.map((utt: {
-                speaker?: number;
-                transcript: string;
-                start: number;
-                end: number;
-                words?: Array<{ word: string; start: number; end: number; confidence: number; speaker?: number }>;
-            }, idx: number) => ({
+        // 4. Mapear segments e salvar no banco
+        const segments: Array<{
+            id: number;
+            text: string;
+            start: number;
+            end: number;
+        }> = whisperData.segments ?? [];
+
+        if (segments.length === 0 && whisperData.text) {
+            // Fallback: se não retornou segments, salva como utterance única
+            await supabase.from("utterances").insert({
                 transcription_id: transcriptionId,
-                speaker_label: `SPEAKER_${String(utt.speaker ?? 0).padStart(2, "0")}`,
-                text: utt.transcript,
-                start_time: utt.start,
-                end_time: utt.end,
-                words: utt.words ? JSON.stringify(utt.words) : null,
+                speaker_label: "SPEAKER_00",
+                text: whisperData.text.trim(),
+                start_time: 0,
+                end_time: whisperData.duration ?? 0,
+                words: null,
+                sort_order: 0,
+            });
+        } else {
+            // Mapear cada segment do Whisper
+            // Whisper não faz diarização, então todos ficam como SPEAKER_00
+            // O LLM na etapa de formatação tentará identificar os roles
+            const utterancesToInsert = segments.map((seg, idx) => ({
+                transcription_id: transcriptionId,
+                speaker_label: "SPEAKER_00",
+                text: seg.text.trim(),
+                start_time: seg.start,
+                end_time: seg.end,
+                words: null,
                 sort_order: idx,
             }));
 
@@ -126,7 +128,7 @@ export async function POST(request: Request) {
             }
         }
 
-        // 4. Atualizar status para formatting
+        // 5. Atualizar status para formatting
         await supabase
             .from("transcriptions")
             .update({ status: "formatting", updated_at: new Date().toISOString() })
@@ -134,7 +136,8 @@ export async function POST(request: Request) {
 
         return NextResponse.json({
             success: true,
-            utteranceCount: dgUtterances.length,
+            segmentCount: segments.length,
+            duration: whisperData.duration,
         });
     } catch (err) {
         console.error("Transcribe route error:", err);

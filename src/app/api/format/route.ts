@@ -63,7 +63,7 @@ export async function POST(request: Request) {
         }
 
         const azure = createAzure({
-            resourceName: process.env.AZURE_OPENAI_ENDPOINT!.replace("https://", "").replace(".openai.azure.com", ""),
+            baseURL: `${process.env.AZURE_OPENAI_ENDPOINT!}/openai/deployments`,
             apiKey: process.env.AZURE_OPENAI_API_KEY!,
         });
 
