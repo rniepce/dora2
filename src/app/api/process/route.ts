@@ -4,6 +4,9 @@ import { runWhisperTranscription } from "@/lib/transcribe-whisper";
 import { runDeepgramTranscription } from "@/lib/transcribe-deepgram";
 import { runFormatting } from "@/lib/format-llm";
 
+// Railway/Vercel: permitir até 5 minutos de processamento
+export const maxDuration = 300;
+
 /**
  * POST /api/process
  * Body: { transcriptionId: string, engine?: "whisper" | "deepgram" }
@@ -33,13 +36,14 @@ export async function POST(request: Request) {
                 await runWhisperTranscription(transcriptionId, supabase);
             }
         } catch (err) {
-            console.error(`[Process] Transcription failed:`, err);
+            const errMsg = err instanceof Error ? err.message : "Erro desconhecido";
+            console.error(`[Process] Transcription failed:`, errMsg);
             await supabase
                 .from("transcriptions")
-                .update({ status: "error", updated_at: new Date().toISOString() })
+                .update({ status: "error", error_message: errMsg, updated_at: new Date().toISOString() })
                 .eq("id", transcriptionId);
             return NextResponse.json(
-                { error: `Transcrição falhou: ${err instanceof Error ? err.message : "Erro"}`, step: "transcribe" },
+                { error: `Transcrição falhou: ${errMsg}`, step: "transcribe" },
                 { status: 500 }
             );
         }
@@ -48,13 +52,14 @@ export async function POST(request: Request) {
         try {
             await runFormatting(transcriptionId, supabase);
         } catch (err) {
-            console.error(`[Process] Formatting failed:`, err);
+            const errMsg = err instanceof Error ? err.message : "Erro desconhecido";
+            console.error(`[Process] Formatting failed:`, errMsg);
             await supabase
                 .from("transcriptions")
-                .update({ status: "error", updated_at: new Date().toISOString() })
+                .update({ status: "error", error_message: errMsg, updated_at: new Date().toISOString() })
                 .eq("id", transcriptionId);
             return NextResponse.json(
-                { error: `Formatação falhou: ${err instanceof Error ? err.message : "Erro"}`, step: "format" },
+                { error: `Formatação falhou: ${errMsg}`, step: "format" },
                 { status: 500 }
             );
         }
