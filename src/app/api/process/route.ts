@@ -1,12 +1,18 @@
 import { NextResponse } from "next/server";
+import { createServerClient } from "@/lib/supabase-server";
+import { runWhisperTranscription } from "@/lib/transcribe-whisper";
+import { runDeepgramTranscription } from "@/lib/transcribe-deepgram";
+import { runFormatting } from "@/lib/format-llm";
 
 /**
  * POST /api/process
  * Body: { transcriptionId: string, engine?: "whisper" | "deepgram" }
  *
  * Orquestra o pipeline completo:
- * 1. Chama /api/transcribe ou /api/transcribe-deepgram
- * 2. Chama /api/format (LLM)
+ * 1. Transcreve com Whisper ou Deepgram
+ * 2. Formata com LLM
+ *
+ * Chamadas diretas (sem fetch interno) para compatibilidade com Railway.
  */
 export async function POST(request: Request) {
     try {
@@ -16,55 +22,50 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: "transcriptionId é obrigatório" }, { status: 400 });
         }
 
-        const origin = new URL(request.url).origin;
+        const supabase = await createServerClient();
+        console.log(`[Process] Starting pipeline for ${transcriptionId} with engine: ${engine}`);
 
-        // 1. Transcrição — rota depende do engine
-        const transcribeEndpoint =
-            engine === "deepgram" ? "/api/transcribe-deepgram" : "/api/transcribe";
-
-        console.log(`Processing with engine: ${engine} → ${transcribeEndpoint}`);
-
-        const transcribeRes = await fetch(`${origin}${transcribeEndpoint}`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ transcriptionId }),
-        });
-
-        if (!transcribeRes.ok) {
-            const err = await transcribeRes.json();
+        // 1. Transcrição
+        try {
+            if (engine === "deepgram") {
+                await runDeepgramTranscription(transcriptionId, supabase);
+            } else {
+                await runWhisperTranscription(transcriptionId, supabase);
+            }
+        } catch (err) {
+            console.error(`[Process] Transcription failed:`, err);
+            await supabase
+                .from("transcriptions")
+                .update({ status: "error", updated_at: new Date().toISOString() })
+                .eq("id", transcriptionId);
             return NextResponse.json(
-                { error: `Transcrição falhou: ${err.error}`, step: "transcribe" },
+                { error: `Transcrição falhou: ${err instanceof Error ? err.message : "Erro"}`, step: "transcribe" },
                 { status: 500 }
             );
         }
-
-        const transcribeData = await transcribeRes.json();
 
         // 2. Formatação com LLM
-        const formatRes = await fetch(`${origin}/api/format`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ transcriptionId }),
-        });
-
-        if (!formatRes.ok) {
-            const err = await formatRes.json();
+        try {
+            await runFormatting(transcriptionId, supabase);
+        } catch (err) {
+            console.error(`[Process] Formatting failed:`, err);
+            await supabase
+                .from("transcriptions")
+                .update({ status: "error", updated_at: new Date().toISOString() })
+                .eq("id", transcriptionId);
             return NextResponse.json(
-                { error: `Formatação falhou: ${err.error}`, step: "format" },
+                { error: `Formatação falhou: ${err instanceof Error ? err.message : "Erro"}`, step: "format" },
                 { status: 500 }
             );
         }
 
-        const formatData = await formatRes.json();
-
+        console.log(`[Process] Pipeline complete for ${transcriptionId}`);
         return NextResponse.json({
             success: true,
             engine,
-            transcribe: transcribeData,
-            format: formatData,
         });
     } catch (err) {
-        console.error("Process pipeline error:", err);
+        console.error("[Process] Pipeline error:", err);
         return NextResponse.json(
             { error: err instanceof Error ? err.message : "Erro interno no pipeline" },
             { status: 500 }
