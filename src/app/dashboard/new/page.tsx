@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
     Upload,
@@ -29,12 +29,7 @@ const ACCEPTED_VIDEO = ".mp4,.mkv,.avi,.mov,.webm,.flv,.wmv";
 const ACCEPTED_AUDIO = ".mp3,.wav,.ogg,.m4a,.aac,.flac,.wma";
 const ACCEPTED_ALL = `${ACCEPTED_VIDEO},${ACCEPTED_AUDIO}`;
 
-type UploadStep = "form" | "uploading" | "processing" | "done" | "error";
-
-const AUDIO_EXTENSIONS = new Set([
-    "mp3", "wav", "ogg", "m4a", "aac", "flac", "wma",
-]);
-
+const AUDIO_EXTENSIONS = new Set(["mp3", "wav", "ogg", "m4a", "aac", "flac", "wma"]);
 function isAudioFile(filename: string): boolean {
     const ext = filename.split(".").pop()?.toLowerCase() ?? "";
     return AUDIO_EXTENSIONS.has(ext);
@@ -52,22 +47,70 @@ export default function NewTranscriptionPage() {
     const router = useRouter();
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    // Form state
+    // Form
     const [title, setTitle] = useState("");
     const [glossary, setGlossary] = useState("");
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
-    // Pipeline state
-    const [step, setStep] = useState<UploadStep>("form");
-    const [uploadProgress, setUploadProgress] = useState(0);
+    // Pipeline
+    const [isProcessing, setIsProcessing] = useState(false);
+    const [isDone, setIsDone] = useState(false);
+    const [isError, setIsError] = useState(false);
     const [errorMsg, setErrorMsg] = useState("");
+
+    // Progress (real-time via polling)
+    const [progress, setProgress] = useState(0);
+    const [progressLabel, setProgressLabel] = useState("");
+    const [transcriptionId, setTranscriptionId] = useState<string | null>(null);
+    const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+    // ─── Polling para progresso real ────────────────────────────────────────
+    useEffect(() => {
+        if (!transcriptionId || isDone || isError) {
+            if (pollingRef.current) clearInterval(pollingRef.current);
+            return;
+        }
+
+        const poll = async () => {
+            try {
+                const res = await fetch(`/api/status/${transcriptionId}`);
+                if (!res.ok) return;
+                const data = await res.json();
+                setProgress(data.progress);
+                setProgressLabel(data.label);
+
+                if (data.status === "completed") {
+                    setIsDone(true);
+                    setIsProcessing(false);
+                    setProgress(100);
+                    setProgressLabel("Concluído!");
+                    toast.success("Degravação concluída!");
+                    if (pollingRef.current) clearInterval(pollingRef.current);
+                    setTimeout(() => {
+                        router.push("/dashboard");
+                        router.refresh();
+                    }, 2000);
+                } else if (data.status === "error") {
+                    setIsError(true);
+                    setIsProcessing(false);
+                    setProgressLabel("Erro no processamento");
+                    if (pollingRef.current) clearInterval(pollingRef.current);
+                }
+            } catch { /* ignore polling errors */ }
+        };
+
+        pollingRef.current = setInterval(poll, 2000);
+        poll(); // primeira chamada imediata
+
+        return () => {
+            if (pollingRef.current) clearInterval(pollingRef.current);
+        };
+    }, [transcriptionId, isDone, isError, router]);
 
     // ─── File selection ──────────────────────────────────────────────────────
     const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
-        if (file) {
-            setSelectedFile(file);
-        }
+        if (file) setSelectedFile(file);
     }, []);
 
     const clearFile = useCallback(() => {
@@ -75,7 +118,7 @@ export default function NewTranscriptionPage() {
         if (fileInputRef.current) fileInputRef.current.value = "";
     }, []);
 
-    // ─── Submit pipeline ────────────────────────────────────────────────────
+    // ─── Submit ─────────────────────────────────────────────────────────────
     const handleSubmit = useCallback(async () => {
         if (!selectedFile || !title.trim()) {
             toast.error("Preencha o título e selecione um arquivo.");
@@ -83,7 +126,11 @@ export default function NewTranscriptionPage() {
         }
 
         try {
-            // 1) Criar registro no banco
+            setIsProcessing(true);
+            setProgress(5);
+            setProgressLabel("Criando registro...");
+
+            // 1. Criar registro
             const result = await createTranscriptionAction({
                 title: title.trim(),
                 glossary: glossary.trim() || null,
@@ -93,17 +140,14 @@ export default function NewTranscriptionPage() {
                 throw new Error(result.error || "Erro ao criar degravação.");
             }
 
-            const transcriptionId = result.id;
+            setTranscriptionId(result.id);
+            setProgress(8);
+            setProgressLabel("Enviando arquivo...");
 
-            // 2) Upload direto para Supabase Storage
-            setStep("uploading");
-            setUploadProgress(10);
-
+            // 2. Upload para Supabase Storage
             const supabase = createClient();
             const ext = selectedFile.name.split(".").pop()?.toLowerCase() ?? "mp3";
-            const filePath = `${transcriptionId}/media.${ext}`;
-
-            setUploadProgress(30);
+            const filePath = `${result.id}/media.${ext}`;
 
             const { error: uploadError } = await supabase.storage
                 .from("media")
@@ -116,15 +160,16 @@ export default function NewTranscriptionPage() {
                 throw new Error(`Upload falhou: ${uploadError.message}`);
             }
 
-            setUploadProgress(70);
+            setProgress(12);
+            setProgressLabel("Iniciando processamento...");
 
-            // 3) Pegar URL pública e atualizar o registro
+            // 3. Pegar URL pública e atualizar registro
             const { data: urlData } = supabase.storage
                 .from("media")
                 .getPublicUrl(filePath);
 
             const updateResult = await updateTranscriptionMediaUrl(
-                transcriptionId,
+                result.id,
                 urlData.publicUrl
             );
 
@@ -132,79 +177,33 @@ export default function NewTranscriptionPage() {
                 throw new Error(updateResult.error);
             }
 
-            setUploadProgress(100);
-
-            // 4) Disparar pipeline de IA (transcrição + formatação)
-            setStep("processing");
-
-            toast.info("Upload concluído! Iniciando transcrição...", {
-                description: "O pipeline de IA está processando o áudio.",
-            });
-
-            const processRes = await fetch("/api/process", {
+            // 4. Disparar pipeline de processamento (não-bloqueante para o polling)
+            fetch("/api/process", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ transcriptionId }),
+                body: JSON.stringify({ transcriptionId: result.id }),
+            }).catch((err) => {
+                console.error("Process error:", err);
             });
 
-            if (!processRes.ok) {
-                const err = await processRes.json();
-                console.error("Process pipeline error:", err);
-                toast.warning("Upload OK, mas o processamento falhou", {
-                    description: err.error || "Você pode tentar reprocessar depois.",
-                });
-            } else {
-                toast.success("Degravação concluída!", {
-                    description: "Transcrição e formatação finalizadas com sucesso.",
-                });
-            }
-
-            setStep("done");
-
-            // Redirecionar para o dashboard após 2 segundos
-            setTimeout(() => {
-                router.push("/dashboard");
-                router.refresh();
-            }, 2000);
+            // O polling cuida do resto! O useEffect acima vai atualizar o progresso
+            toast.info("Pipeline de IA iniciado!", {
+                description: "Acompanhe o progresso em tempo real.",
+            });
         } catch (err) {
-            console.error("Upload pipeline error:", err);
+            console.error("Upload error:", err);
             setErrorMsg(err instanceof Error ? err.message : "Erro inesperado.");
-            setStep("error");
-            toast.error("Erro no upload", {
+            setIsError(true);
+            setIsProcessing(false);
+            toast.error("Erro", {
                 description: err instanceof Error ? err.message : "Erro inesperado.",
             });
         }
     }, [selectedFile, title, glossary, router]);
 
-    // ─── Progress display helpers ───────────────────────────────────────────
-    const getOverallProgress = (): number => {
-        if (step === "form") return 0;
-        if (step === "uploading") return Math.round(uploadProgress * 0.6); // 0-60%
-        if (step === "processing") return 70;
-        if (step === "done") return 100;
-        return 0;
-    };
-
-    const getStepLabel = (): string => {
-        switch (step) {
-            case "uploading":
-                return `Enviando arquivo... ${uploadProgress}%`;
-            case "processing":
-                return "Transcrevendo e formatando com IA...";
-            case "done":
-                return "Concluído!";
-            case "error":
-                return "Erro";
-            default:
-                return "";
-        }
-    };
-
-    const isProcessing = step === "uploading" || step === "processing";
-
     return (
         <div>
-            {/* Back button */}
+            {/* Back */}
             <Button
                 variant="ghost"
                 className="mb-6 text-muted-foreground hover:text-foreground"
@@ -225,29 +224,52 @@ export default function NewTranscriptionPage() {
                     </p>
                 </div>
 
-                {/* Progress bar (visible during processing) */}
-                {step !== "form" && (
-                    <Card className="mb-6 border-border bg-white shadow-sm">
-                        <CardContent className="p-4">
-                            <div className="mb-2 flex items-center justify-between text-sm">
-                                <span className="flex items-center gap-2 font-medium">
-                                    {step === "done" ? (
+                {/* Progress Card (real-time) */}
+                {(isProcessing || isDone || isError) && (
+                    <Card className="mb-6 border-border bg-white shadow-sm overflow-hidden">
+                        <CardContent className="p-0">
+                            {/* Progress header */}
+                            <div className="flex items-center justify-between p-4 pb-2">
+                                <span className="flex items-center gap-2 text-sm font-medium">
+                                    {isDone ? (
                                         <CheckCircle2 className="h-4 w-4 text-green-600" />
-                                    ) : step === "error" ? (
+                                    ) : isError ? (
                                         <AlertCircle className="h-4 w-4 text-red-600" />
                                     ) : (
                                         <Loader2 className="h-4 w-4 animate-spin text-primary" />
                                     )}
-                                    {getStepLabel()}
+                                    {progressLabel}
                                 </span>
-                                <span className="text-muted-foreground">
-                                    {getOverallProgress()}%
+                                <span className="text-sm font-mono text-muted-foreground">
+                                    {progress}%
                                 </span>
                             </div>
-                            <Progress value={getOverallProgress()} className="h-2" />
 
-                            {step === "error" && errorMsg && (
-                                <p className="mt-2 text-sm text-red-600">{errorMsg}</p>
+                            {/* Progress bar */}
+                            <div className="px-4 pb-3">
+                                <Progress value={progress} className="h-3" />
+                            </div>
+
+                            {/* Pipeline steps */}
+                            <div className="border-t border-border px-4 py-3 grid grid-cols-4 gap-1 text-xs text-center">
+                                <div className={progress >= 10 ? "text-foreground font-medium" : "text-muted-foreground"}>
+                                    {progress >= 10 ? "✓" : "○"} Upload
+                                </div>
+                                <div className={progress >= 25 ? "text-foreground font-medium" : "text-muted-foreground"}>
+                                    {progress >= 25 ? "✓" : progress >= 15 ? "◌" : "○"} Conversão
+                                </div>
+                                <div className={progress >= 55 ? "text-foreground font-medium" : "text-muted-foreground"}>
+                                    {progress >= 55 ? "✓" : progress >= 35 ? "◌" : "○"} Whisper
+                                </div>
+                                <div className={progress >= 100 ? "text-foreground font-medium" : "text-muted-foreground"}>
+                                    {progress >= 100 ? "✓" : progress >= 70 ? "◌" : "○"} IA Format
+                                </div>
+                            </div>
+
+                            {isError && errorMsg && (
+                                <div className="border-t border-border px-4 py-2">
+                                    <p className="text-sm text-red-600">{errorMsg}</p>
+                                </div>
                             )}
                         </CardContent>
                     </Card>
@@ -270,7 +292,7 @@ export default function NewTranscriptionPage() {
                                 value={title}
                                 onChange={(e) => setTitle(e.target.value)}
                                 placeholder="Ex: Processo nº 12345-67.2024.8.13.0001"
-                                disabled={isProcessing || step === "done"}
+                                disabled={isProcessing || isDone}
                             />
                         </div>
 
@@ -284,14 +306,13 @@ export default function NewTranscriptionPage() {
                                 id="glossary"
                                 value={glossary}
                                 onChange={(e) => setGlossary(e.target.value)}
-                                placeholder="Nomes do juiz, partes, testemunhas, termos técnicos... (um por linha)"
+                                placeholder="Nomes do juiz, partes, testemunhas, termos técnicos..."
                                 rows={3}
-                                disabled={isProcessing || step === "done"}
+                                disabled={isProcessing || isDone}
                                 className="resize-none"
                             />
                             <p className="text-xs text-muted-foreground">
-                                Esses termos serão usados como contexto para melhorar a precisão
-                                da transcrição.
+                                Esses termos melhoram a precisão da transcrição.
                             </p>
                         </div>
 
@@ -326,20 +347,11 @@ export default function NewTranscriptionPage() {
                                         )}
                                     </div>
                                     <div className="min-w-0 flex-1">
-                                        <p className="truncate font-medium text-foreground">
-                                            {selectedFile.name}
-                                        </p>
-                                        <p className="text-xs text-muted-foreground">
-                                            {formatBytes(selectedFile.size)}
-                                        </p>
+                                        <p className="truncate font-medium text-foreground">{selectedFile.name}</p>
+                                        <p className="text-xs text-muted-foreground">{formatBytes(selectedFile.size)}</p>
                                     </div>
-                                    {!isProcessing && step !== "done" && (
-                                        <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            onClick={clearFile}
-                                            className="text-muted-foreground hover:text-foreground"
-                                        >
+                                    {!isProcessing && !isDone && (
+                                        <Button variant="ghost" size="sm" onClick={clearFile} className="text-muted-foreground hover:text-foreground">
                                             <X className="h-4 w-4" />
                                         </Button>
                                     )}
@@ -352,14 +364,14 @@ export default function NewTranscriptionPage() {
                                 accept={ACCEPTED_ALL}
                                 className="hidden"
                                 onChange={handleFileSelect}
-                                disabled={isProcessing || step === "done"}
+                                disabled={isProcessing || isDone}
                             />
                         </div>
 
                         {/* Submit */}
                         <Button
                             onClick={handleSubmit}
-                            disabled={!title.trim() || !selectedFile || isProcessing || step === "done"}
+                            disabled={!title.trim() || !selectedFile || isProcessing || isDone}
                             className="w-full gradient-primary font-semibold text-white shadow-md hover:shadow-lg"
                             size="lg"
                         >
@@ -368,7 +380,7 @@ export default function NewTranscriptionPage() {
                                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                                     Processando...
                                 </>
-                            ) : step === "done" ? (
+                            ) : isDone ? (
                                 <>
                                     <CheckCircle2 className="mr-2 h-4 w-4" />
                                     Enviado com sucesso!
@@ -381,13 +393,16 @@ export default function NewTranscriptionPage() {
                             )}
                         </Button>
 
-                        {step === "error" && (
+                        {isError && (
                             <Button
                                 variant="outline"
                                 className="w-full"
                                 onClick={() => {
-                                    setStep("form");
+                                    setIsError(false);
+                                    setIsProcessing(false);
+                                    setProgress(0);
                                     setErrorMsg("");
+                                    setTranscriptionId(null);
                                 }}
                             >
                                 Tentar novamente

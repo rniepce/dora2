@@ -45,13 +45,18 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: "Áudio ainda não foi enviado" }, { status: 400 });
         }
 
+        // Helper para atualizar progresso
+        const updateProgress = async (progress: number, status?: string) => {
+            const update: Record<string, unknown> = { progress, updated_at: new Date().toISOString() };
+            if (status) update.status = status;
+            await supabase.from("transcriptions").update(update).eq("id", transcriptionId);
+        };
+
         // Atualizar status para transcribing
-        await supabase
-            .from("transcriptions")
-            .update({ status: "transcribing", updated_at: new Date().toISOString() })
-            .eq("id", transcriptionId);
+        await updateProgress(15, "transcribing");
 
         // 2. Baixar o arquivo do Supabase Storage
+        await updateProgress(20);
         console.log("Downloading media from:", transcription.media_url);
         const mediaResponse = await fetch(transcription.media_url);
         if (!mediaResponse.ok) {
@@ -70,6 +75,7 @@ export async function POST(request: Request) {
         let audioFilename: string;
 
         if (needsConversion) {
+            await updateProgress(25);
             console.log("Converting to MP3 with FFmpeg...");
             const tmpId = randomUUID();
             const inputPath = join(tmpdir(), `input-${tmpId}.${ext || "mp4"}`);
@@ -98,6 +104,7 @@ export async function POST(request: Request) {
         }
 
         // 4. Enviar para Azure Whisper
+        await updateProgress(35);
         const endpoint = process.env.AZURE_OPENAI_ENDPOINT!;
         const apiKey = process.env.AZURE_OPENAI_API_KEY!;
         const whisperUrl = `${endpoint}/openai/deployments/whisper/audio/transcriptions?api-version=2024-06-01`;
@@ -126,6 +133,7 @@ export async function POST(request: Request) {
         }
 
         const whisperData = await whisperRes.json();
+        await updateProgress(55);
         console.log(`Whisper returned ${whisperData.segments?.length ?? 0} segments`);
 
         // 5. Mapear segments e salvar no banco
@@ -172,10 +180,7 @@ export async function POST(request: Request) {
         }
 
         // 6. Atualizar status para formatting
-        await supabase
-            .from("transcriptions")
-            .update({ status: "formatting", updated_at: new Date().toISOString() })
-            .eq("id", transcriptionId);
+        await updateProgress(65, "formatting");
 
         return NextResponse.json({
             success: true,

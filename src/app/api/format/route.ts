@@ -67,6 +67,14 @@ export async function POST(request: Request) {
             apiKey: process.env.AZURE_OPENAI_API_KEY!,
         });
 
+        // Helper para atualizar progresso
+        const updateProgress = async (progress: number, status?: string) => {
+            const update: Record<string, unknown> = { progress, updated_at: new Date().toISOString() };
+            if (status) update.status = status;
+            await supabase.from("transcriptions").update(update).eq("id", transcriptionId);
+        };
+
+        await updateProgress(70);
         const allUpdates: Array<{ id: string; speaker_label: string; text: string }> = [];
 
         for (const batch of batches) {
@@ -86,6 +94,10 @@ export async function POST(request: Request) {
             if (parsed) {
                 allUpdates.push(...parsed);
             }
+
+            // Atualizar progresso por batch (70-90%)
+            const batchProgress = 70 + Math.round((batches.indexOf(batch) + 1) / batches.length * 20);
+            await updateProgress(batchProgress);
         }
 
         // 3. Atualizar utterances no banco
@@ -100,10 +112,7 @@ export async function POST(request: Request) {
         }
 
         // 4. Atualizar status para completed
-        await supabase
-            .from("transcriptions")
-            .update({ status: "completed", updated_at: new Date().toISOString() })
-            .eq("id", transcriptionId);
+        await updateProgress(100, "completed");
 
         return NextResponse.json({
             success: true,
