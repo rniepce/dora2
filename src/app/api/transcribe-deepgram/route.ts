@@ -131,7 +131,7 @@ export async function POST(request: Request) {
                     Authorization: `Token ${deepgramApiKey}`,
                     "Content-Type": contentType,
                 },
-                body: audioBuffer,
+                body: new Uint8Array(audioBuffer),
             }
         );
 
