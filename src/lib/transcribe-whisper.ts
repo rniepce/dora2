@@ -172,13 +172,17 @@ async function callWhisperAPI(
     const apiKey = process.env.AZURE_OPENAI_API_KEY!;
     const whisperUrl = `${endpoint}/openai/deployments/whisper/audio/transcriptions?api-version=2024-06-01`;
 
+    // Usar File (Node 20+) em vez de Blob para melhor compatibilidade
+    const file = new File([new Uint8Array(audioBuffer)], filename, { type: "audio/mpeg" });
+
     const formData = new FormData();
-    formData.append("file", new Blob([new Uint8Array(audioBuffer)]), filename);
+    formData.append("file", file);
     formData.append("response_format", "verbose_json");
     formData.append("language", "pt");
     formData.append("timestamp_granularities[]", "segment");
 
-    console.log(`[Whisper] Sending ${(audioBuffer.length / 1024 / 1024).toFixed(1)}MB...`);
+    console.log(`[Whisper] Sending ${(audioBuffer.length / 1024 / 1024).toFixed(1)}MB to ${whisperUrl}...`);
+
     const res = await fetch(whisperUrl, {
         method: "POST",
         headers: { "api-key": apiKey },
@@ -187,11 +191,13 @@ async function callWhisperAPI(
 
     if (!res.ok) {
         const errorText = await res.text();
-        console.error("[Whisper] API error:", errorText);
-        throw new Error(`Whisper: ${errorText}`);
+        console.error("[Whisper] API error:", res.status, errorText);
+        throw new Error(`Whisper API ${res.status}: ${errorText.substring(0, 200)}`);
     }
 
     const data = await res.json();
+    console.log(`[Whisper] Response received, segments: ${data.segments?.length ?? 0}, text length: ${data.text?.length ?? 0}`);
+
     const segments: Array<{ id: number; text: string; start: number; end: number }> = data.segments ?? [];
 
     if (segments.length === 0 && data.text) {
