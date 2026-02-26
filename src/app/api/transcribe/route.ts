@@ -1,15 +1,24 @@
 import { NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase-server";
+import { writeFile, unlink, readFile } from "fs/promises";
+import { execSync } from "child_process";
+import { tmpdir } from "os";
+import { join } from "path";
+import { randomUUID } from "crypto";
+
+const VIDEO_EXTENSIONS = new Set(["mp4", "mkv", "avi", "mov", "webm", "flv", "wmv"]);
+const MAX_WHISPER_SIZE = 24 * 1024 * 1024; // 24MB de segurança
 
 /**
  * POST /api/transcribe
  * Body: { transcriptionId: string }
  *
  * 1. Busca a degravação no banco (pega media_url)
- * 2. Baixa o áudio do Supabase Storage
- * 3. Envia para Azure Whisper (segments com timestamps)
- * 4. Salva as utterances no banco
- * 5. Atualiza o status para "formatting"
+ * 2. Baixa o arquivo do Supabase Storage
+ * 3. Se é vídeo ou > 24MB, converte para MP3 com FFmpeg
+ * 4. Envia para Azure Whisper (segments com timestamps)
+ * 5. Salva as utterances no banco
+ * 6. Atualiza o status para "formatting"
  */
 export async function POST(request: Request) {
     try {
@@ -42,29 +51,67 @@ export async function POST(request: Request) {
             .update({ status: "transcribing", updated_at: new Date().toISOString() })
             .eq("id", transcriptionId);
 
-        // 2. Baixar o áudio do Supabase Storage
-        const audioResponse = await fetch(transcription.media_url);
-        if (!audioResponse.ok) {
-            throw new Error("Não foi possível baixar o áudio do Storage");
+        // 2. Baixar o arquivo do Supabase Storage
+        console.log("Downloading media from:", transcription.media_url);
+        const mediaResponse = await fetch(transcription.media_url);
+        if (!mediaResponse.ok) {
+            throw new Error("Não foi possível baixar o arquivo do Storage");
         }
-        const audioBlob = await audioResponse.blob();
+        const mediaBuffer = Buffer.from(await mediaResponse.arrayBuffer());
+        console.log(`Downloaded: ${(mediaBuffer.length / 1024 / 1024).toFixed(1)}MB`);
 
-        // 3. Enviar para Azure Whisper
+        // 3. Determinar se precisa converter
+        const urlPath = new URL(transcription.media_url).pathname;
+        const ext = urlPath.split(".").pop()?.toLowerCase() ?? "";
+        const isVideo = VIDEO_EXTENSIONS.has(ext);
+        const needsConversion = isVideo || mediaBuffer.length > MAX_WHISPER_SIZE;
+
+        let audioBuffer: Buffer;
+        let audioFilename: string;
+
+        if (needsConversion) {
+            console.log("Converting to MP3 with FFmpeg...");
+            const tmpId = randomUUID();
+            const inputPath = join(tmpdir(), `input-${tmpId}.${ext || "mp4"}`);
+            const outputPath = join(tmpdir(), `output-${tmpId}.mp3`);
+
+            try {
+                await writeFile(inputPath, mediaBuffer);
+
+                // FFmpeg: extrair áudio, comprimir para MP3 mono 64kbps
+                execSync(
+                    `ffmpeg -i "${inputPath}" -vn -acodec libmp3lame -ab 64k -ar 16000 -ac 1 -y "${outputPath}"`,
+                    { timeout: 120000, stdio: "pipe" }
+                );
+
+                audioBuffer = await readFile(outputPath);
+                audioFilename = "audio.mp3";
+                console.log(`Converted: ${(audioBuffer.length / 1024 / 1024).toFixed(1)}MB`);
+            } finally {
+                // Limpar arquivos temporários
+                await unlink(inputPath).catch(() => { });
+                await unlink(outputPath).catch(() => { });
+            }
+        } else {
+            audioBuffer = mediaBuffer;
+            audioFilename = `audio.${ext || "mp3"}`;
+        }
+
+        // 4. Enviar para Azure Whisper
         const endpoint = process.env.AZURE_OPENAI_ENDPOINT!;
         const apiKey = process.env.AZURE_OPENAI_API_KEY!;
         const whisperUrl = `${endpoint}/openai/deployments/whisper/audio/transcriptions?api-version=2024-06-01`;
 
         const formData = new FormData();
-        formData.append("file", audioBlob, "audio.mp3");
+        formData.append("file", new Blob([new Uint8Array(audioBuffer)]), audioFilename);
         formData.append("response_format", "verbose_json");
         formData.append("language", "pt");
         formData.append("timestamp_granularities[]", "segment");
 
+        console.log("Sending to Whisper...");
         const whisperRes = await fetch(whisperUrl, {
             method: "POST",
-            headers: {
-                "api-key": apiKey,
-            },
+            headers: { "api-key": apiKey },
             body: formData,
         });
 
@@ -79,8 +126,9 @@ export async function POST(request: Request) {
         }
 
         const whisperData = await whisperRes.json();
+        console.log(`Whisper returned ${whisperData.segments?.length ?? 0} segments`);
 
-        // 4. Mapear segments e salvar no banco
+        // 5. Mapear segments e salvar no banco
         const segments: Array<{
             id: number;
             text: string;
@@ -89,7 +137,6 @@ export async function POST(request: Request) {
         }> = whisperData.segments ?? [];
 
         if (segments.length === 0 && whisperData.text) {
-            // Fallback: se não retornou segments, salva como utterance única
             await supabase.from("utterances").insert({
                 transcription_id: transcriptionId,
                 speaker_label: "SPEAKER_00",
@@ -100,9 +147,6 @@ export async function POST(request: Request) {
                 sort_order: 0,
             });
         } else {
-            // Mapear cada segment do Whisper
-            // Whisper não faz diarização, então todos ficam como SPEAKER_00
-            // O LLM na etapa de formatação tentará identificar os roles
             const utterancesToInsert = segments.map((seg, idx) => ({
                 transcription_id: transcriptionId,
                 speaker_label: "SPEAKER_00",
@@ -113,7 +157,6 @@ export async function POST(request: Request) {
                 sort_order: idx,
             }));
 
-            // Inserir em batch
             const { error: insertError } = await supabase
                 .from("utterances")
                 .insert(utterancesToInsert);
@@ -128,7 +171,7 @@ export async function POST(request: Request) {
             }
         }
 
-        // 5. Atualizar status para formatting
+        // 6. Atualizar status para formatting
         await supabase
             .from("transcriptions")
             .update({ status: "formatting", updated_at: new Date().toISOString() })
@@ -138,6 +181,7 @@ export async function POST(request: Request) {
             success: true,
             segmentCount: segments.length,
             duration: whisperData.duration,
+            converted: needsConversion,
         });
     } catch (err) {
         console.error("Transcribe route error:", err);

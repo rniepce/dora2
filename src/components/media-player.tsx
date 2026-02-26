@@ -24,9 +24,17 @@ function formatTime(seconds: number): string {
     return `${m}:${String(s).padStart(2, "0")}`;
 }
 
-export const MediaPlayer = forwardRef<HTMLAudioElement, MediaPlayerProps>(
+const VIDEO_EXTENSIONS = new Set(["mp4", "mkv", "avi", "mov", "webm", "flv", "wmv"]);
+
+function isVideoUrl(url: string): boolean {
+    const ext = url.split(".").pop()?.toLowerCase()?.split("?")[0] ?? "";
+    return VIDEO_EXTENSIONS.has(ext);
+}
+
+export const MediaPlayer = forwardRef<HTMLVideoElement | HTMLAudioElement, MediaPlayerProps>(
     function MediaPlayer({ src, currentTime, duration, isPlaying, onTogglePlay, onSeek }, ref) {
         const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
+        const isVideo = isVideoUrl(src);
 
         const handleProgressClick = (e: React.MouseEvent<HTMLDivElement>) => {
             const rect = e.currentTarget.getBoundingClientRect();
@@ -40,8 +48,21 @@ export const MediaPlayer = forwardRef<HTMLAudioElement, MediaPlayerProps>(
 
         return (
             <div className="rounded-xl border border-border bg-white p-4 shadow-sm">
-                {/* Hidden HTML5 audio element */}
-                <audio ref={ref} src={src} preload="metadata" />
+                {/* Media element */}
+                {isVideo ? (
+                    <video
+                        ref={ref as React.Ref<HTMLVideoElement>}
+                        src={src}
+                        preload="metadata"
+                        className="mb-4 w-full rounded-lg bg-black"
+                    />
+                ) : (
+                    <audio
+                        ref={ref as React.Ref<HTMLAudioElement>}
+                        src={src}
+                        preload="metadata"
+                    />
+                )}
 
                 {/* Progress bar */}
                 <div
