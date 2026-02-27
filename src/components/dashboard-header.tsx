@@ -29,7 +29,7 @@ export function DashboardHeader({ userName }: DashboardHeaderProps) {
                         <Scale className="h-4 w-4 text-white" />
                     </div>
                     <span className="text-lg font-bold tracking-tight text-foreground">
-                        JusScribe
+                        Transcritor TJMG
                     </span>
                 </Link>
 

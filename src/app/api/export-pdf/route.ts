@@ -103,7 +103,7 @@ export async function GET(req: NextRequest) {
             doc.setFontSize(8);
             doc.setTextColor(156, 163, 175);
             doc.text(
-                `JusScribe — ${transcription.title}`,
+                `Transcritor TJMG — ${transcription.title}`,
                 marginLeft,
                 pageHeight - 10
             );

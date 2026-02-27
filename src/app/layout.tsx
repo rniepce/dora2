@@ -9,7 +9,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "JusScribe — Degravação Inteligente de Audiências",
+  title: "Transcritor TJMG — Degravação Inteligente de Audiências",
   description:
     "Transcreva, diarize e formate audiências judiciais com IA. Editor interativo sincronizado com áudio/vídeo.",
 };

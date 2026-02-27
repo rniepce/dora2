@@ -46,7 +46,7 @@ export default function LoginPage() {
                     </div>
                     <div>
                         <CardTitle className="text-2xl font-bold">
-                            <span className="text-gradient">JusScribe</span>
+                            <span className="text-gradient">Transcritor TJMG</span>
                         </CardTitle>
                         <CardDescription className="mt-1 text-muted-foreground">
                             Degravação inteligente de audiências judiciais

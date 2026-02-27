@@ -245,7 +245,7 @@ export async function GET(req: NextRequest) {
                             new Paragraph({
                                 children: [
                                     new TextRun({
-                                        text: `JusScribe — ${transcription.title}`,
+                                        text: `Transcritor TJMG — ${transcription.title}`,
                                         size: 16,
                                         color: "9CA3AF",
                                         font: "Arial",

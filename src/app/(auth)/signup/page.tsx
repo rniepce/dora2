@@ -49,7 +49,7 @@ export default function SignupPage() {
                     </div>
                     <div>
                         <CardTitle className="text-2xl font-bold">
-                            Criar conta no <span className="text-gradient">JusScribe</span>
+                            Criar conta no <span className="text-gradient">Transcritor TJMG</span>
                         </CardTitle>
                         <CardDescription className="mt-1 text-muted-foreground">
                             Comece a degravação inteligente de audiências
