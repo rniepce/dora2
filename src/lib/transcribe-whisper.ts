@@ -175,7 +175,7 @@ async function callWhisperAPI(
         throw new Error("AZURE_OPENAI_ENDPOINT ou AZURE_OPENAI_API_KEY não configurados");
     }
 
-    const whisperUrl = `${endpoint}/openai/deployments/whisper/audio/transcriptions?api-version=2024-06-01`;
+    const whisperUrl = `${endpoint}/openai/deployments/whisper/audio/transcriptions?api-version=2025-01-01`;
 
     const file = new File([new Uint8Array(audioBuffer)], filename, { type: "audio/mpeg" });
 

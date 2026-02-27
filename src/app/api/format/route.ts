@@ -62,7 +62,7 @@ export async function POST(request: Request) {
 
         const endpoint = process.env.AZURE_OPENAI_ENDPOINT!;
         const apiKey = process.env.AZURE_OPENAI_API_KEY!;
-        const chatUrl = `${endpoint}/openai/deployments/gpt-5.2-chat/chat/completions?api-version=2024-06-01`;
+        const chatUrl = `${endpoint}/openai/deployments/gpt-5.2-chat/chat/completions?api-version=2025-01-01`;
 
         // Helper para atualizar progresso
         const updateProgress = async (progress: number, status?: string) => {

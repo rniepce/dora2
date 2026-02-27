@@ -229,7 +229,7 @@ async function transcribeWithWhisper(
 ): Promise<Array<{ text: string; start: number; end: number }>> {
     const endpoint = process.env.AZURE_OPENAI_ENDPOINT!;
     const apiKey = process.env.AZURE_OPENAI_API_KEY!;
-    const whisperUrl = `${endpoint}/openai/deployments/whisper/audio/transcriptions?api-version=2024-06-01`;
+    const whisperUrl = `${endpoint}/openai/deployments/whisper/audio/transcriptions?api-version=2025-01-01`;
 
     const formData = new FormData();
     formData.append("file", new Blob([new Uint8Array(audioBuffer)]), filename);
