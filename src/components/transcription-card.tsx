@@ -66,7 +66,7 @@ export function TranscriptionCard({ transcription }: { transcription: Transcript
         }
     };
 
-    const content = (
+    const card = (
         <Card
             className={`group relative border-border/50 bg-card/60 backdrop-blur-sm transition-all duration-300 ${isClickable
                 ? "cursor-pointer hover:border-primary/40 hover:bg-card/80 hover:shadow-lg hover:shadow-primary/5"
@@ -82,14 +82,8 @@ export function TranscriptionCard({ transcription }: { transcription: Transcript
                         <h3 className="truncate font-semibold text-sm text-foreground">{transcription.title}</h3>
                     </div>
 
-                    <button
-                        onClick={handleDelete}
-                        disabled={deleting}
-                        className="shrink-0 rounded-md p-1.5 text-muted-foreground/60 opacity-0 transition-all hover:bg-red-500/10 hover:text-red-500 group-hover:opacity-100"
-                        title="Apagar degravação"
-                    >
-                        <Trash2 className="h-3.5 w-3.5" />
-                    </button>
+                    {/* Espaço reservado para o botão de delete (posicionado absolutamente fora do Link) */}
+                    <div className="w-8 shrink-0" />
                 </div>
 
                 <div className="flex items-center justify-between gap-2">
@@ -110,9 +104,23 @@ export function TranscriptionCard({ transcription }: { transcription: Transcript
         </Card>
     );
 
-    if (isClickable) {
-        return <Link href={`/editor/${transcription.id}`}>{content}</Link>;
-    }
+    return (
+        <div className="group relative">
+            {isClickable ? (
+                <Link href={`/editor/${transcription.id}`}>{card}</Link>
+            ) : (
+                card
+            )}
 
-    return content;
+            {/* Botão de delete fora do Link para evitar interferência de clique */}
+            <button
+                onClick={handleDelete}
+                disabled={deleting}
+                className="absolute right-4 top-4 z-10 shrink-0 rounded-md p-1.5 text-muted-foreground/60 opacity-0 transition-all hover:bg-red-500/10 hover:text-red-500 group-hover:opacity-100"
+                title="Apagar degravação"
+            >
+                <Trash2 className="h-3.5 w-3.5" />
+            </button>
+        </div>
+    );
 }

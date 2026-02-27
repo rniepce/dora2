@@ -92,6 +92,14 @@ export async function deleteTranscriptionAction(id: string) {
         return { error: "Não autenticado." };
     }
 
+    // Buscar a transcrição primeiro para obter media_url
+    const { data: transcription } = await supabase
+        .from("transcriptions")
+        .select("media_url")
+        .eq("id", id)
+        .eq("user_id", user.id)
+        .single();
+
     // Deletar utterances primeiro (FK constraint)
     const { error: uttError } = await supabase
         .from("utterances")
@@ -114,6 +122,23 @@ export async function deleteTranscriptionAction(id: string) {
         console.error("Error deleting transcription:", error);
         return { error: "Erro ao apagar degravação." };
     }
+
+    // Limpar arquivo de mídia do Storage (se existir)
+    if (transcription?.media_url) {
+        try {
+            const url = new URL(transcription.media_url);
+            const pathMatch = url.pathname.match(/\/storage\/v1\/object\/[^/]+\/media\/(.+)/);
+            if (pathMatch) {
+                await supabase.storage.from("media").remove([pathMatch[1]]);
+            }
+        } catch {
+            // Ignorar erro de limpeza de storage — a transcrição já foi deletada
+        }
+    }
+
+    // Revalidar a página do dashboard para atualizar o cache do Next.js
+    const { revalidatePath } = await import("next/cache");
+    revalidatePath("/dashboard");
 
     return { success: true };
 }
