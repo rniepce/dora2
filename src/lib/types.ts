@@ -38,6 +38,26 @@ export interface Transcription {
     engine: "whisper" | "deepgram";
     created_at: string;
     updated_at: string;
+    // Campos computados (aggregate)
+    utterance_count?: number;
+    // Campos de compartilhamento (preenchidos no dashboard)
+    is_shared?: boolean;
+    shared_by_email?: string;
     // Relação opcional (join)
     utterances?: Utterance[];
+}
+
+export interface SharedTranscription {
+    id: string;
+    transcription_id: string;
+    shared_by: string;
+    shared_with: string;
+    created_at: string;
+}
+
+export interface ShareInfo {
+    id: string;
+    shared_with_id: string;
+    shared_with_email: string;
+    created_at: string;
 }
