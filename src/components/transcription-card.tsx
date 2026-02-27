@@ -51,12 +51,19 @@ export function TranscriptionCard({ transcription }: { transcription: Transcript
     const isClickable = transcription.status === "completed";
     const router = useRouter();
     const [deleting, setDeleting] = useState(false);
+    const [confirming, setConfirming] = useState(false);
 
-    const handleDelete = async (e: React.MouseEvent) => {
+    const handleDeleteClick = (e: React.MouseEvent) => {
         e.preventDefault();
         e.stopPropagation();
-        if (!confirm("Tem certeza que deseja apagar esta degravação?")) return;
+        setConfirming(true);
+    };
+
+    const handleConfirm = async (e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
         setDeleting(true);
+        setConfirming(false);
         const result = await deleteTranscriptionAction(transcription.id);
         if (result.error) {
             alert(result.error);
@@ -66,61 +73,92 @@ export function TranscriptionCard({ transcription }: { transcription: Transcript
         }
     };
 
+    const handleCancel = (e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setConfirming(false);
+    };
+
     const card = (
         <Card
-            className={`group relative border-border/50 bg-card/60 backdrop-blur-sm transition-all duration-300 ${isClickable
+            className={`group relative border-border/50 bg-card/60 backdrop-blur-sm transition-all duration-300 ${isClickable && !confirming
                 ? "cursor-pointer hover:border-primary/40 hover:bg-card/80 hover:shadow-lg hover:shadow-primary/5"
-                : "opacity-80"
-                } ${deleting ? "pointer-events-none opacity-50" : ""}`}
+                : !confirming ? "opacity-80" : ""
+                } ${deleting ? "pointer-events-none opacity-50" : ""} ${confirming ? "border-red-500/40 bg-red-500/5" : ""}`}
         >
             <CardContent className="flex flex-col gap-3 p-4">
-                <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-center gap-3 min-w-0">
-                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary transition-colors group-hover:bg-primary/15">
-                            <FileText className="h-4 w-4" />
+                {confirming ? (
+                    <div className="flex flex-col items-center gap-3 py-2">
+                        <p className="text-sm font-medium text-red-400">Apagar esta degravação?</p>
+                        <div className="flex gap-2">
+                            <button
+                                onClick={handleConfirm}
+                                className="rounded-md bg-red-500/20 px-3 py-1.5 text-xs font-semibold text-red-400 transition-colors hover:bg-red-500/30"
+                            >
+                                Confirmar
+                            </button>
+                            <button
+                                onClick={handleCancel}
+                                className="rounded-md bg-muted/50 px-3 py-1.5 text-xs font-semibold text-muted-foreground transition-colors hover:bg-muted"
+                            >
+                                Cancelar
+                            </button>
                         </div>
-                        <h3 className="truncate font-semibold text-sm text-foreground">{transcription.title}</h3>
                     </div>
+                ) : (
+                    <>
+                        <div className="flex items-start justify-between gap-2">
+                            <div className="flex items-center gap-3 min-w-0">
+                                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary transition-colors group-hover:bg-primary/15">
+                                    <FileText className="h-4 w-4" />
+                                </div>
+                                <h3 className="truncate font-semibold text-sm text-foreground">{transcription.title}</h3>
+                            </div>
 
-                    {/* Espaço reservado para o botão de delete (posicionado absolutamente fora do Link) */}
-                    <div className="w-8 shrink-0" />
-                </div>
+                            {/* Espaço reservado para o botão de delete (posicionado absolutamente fora do Link) */}
+                            <div className="w-8 shrink-0" />
+                        </div>
 
-                <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                        <Clock className="h-3 w-3" />
-                        <span>{formatDistanceToNow(transcription.created_at)}</span>
-                    </div>
+                        <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                                <Clock className="h-3 w-3" />
+                                <span>{formatDistanceToNow(transcription.created_at)}</span>
+                            </div>
 
-                    <Badge
-                        variant={config.variant}
-                        className={`flex shrink-0 items-center gap-1 border px-2 py-0.5 text-[10px] font-medium ${config.className}`}
-                    >
-                        {config.icon}
-                        {config.label}
-                    </Badge>
-                </div>
+                            <Badge
+                                variant={config.variant}
+                                className={`flex shrink-0 items-center gap-1 border px-2 py-0.5 text-[10px] font-medium ${config.className}`}
+                            >
+                                {config.icon}
+                                {config.label}
+                            </Badge>
+                        </div>
+                    </>
+                )}
             </CardContent>
         </Card>
     );
 
     return (
         <div className="group relative">
-            {isClickable ? (
+            {isClickable && !confirming ? (
                 <Link href={`/editor/${transcription.id}`}>{card}</Link>
             ) : (
                 card
             )}
 
             {/* Botão de delete fora do Link para evitar interferência de clique */}
-            <button
-                onClick={handleDelete}
-                disabled={deleting}
-                className="absolute right-4 top-4 z-10 shrink-0 rounded-md p-1.5 text-muted-foreground/60 opacity-0 transition-all hover:bg-red-500/10 hover:text-red-500 group-hover:opacity-100"
-                title="Apagar degravação"
-            >
-                <Trash2 className="h-3.5 w-3.5" />
-            </button>
+            {!confirming && !deleting && (
+                <button
+                    onClick={handleDeleteClick}
+                    disabled={deleting}
+                    className="absolute right-4 top-4 z-10 shrink-0 rounded-md p-1.5 text-muted-foreground/60 opacity-0 transition-all hover:bg-red-500/10 hover:text-red-500 group-hover:opacity-100"
+                    title="Apagar degravação"
+                >
+                    <Trash2 className="h-3.5 w-3.5" />
+                </button>
+            )}
         </div>
     );
 }
+
