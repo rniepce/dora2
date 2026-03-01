@@ -71,10 +71,10 @@ export const MediaPlayer = forwardRef<HTMLVideoElement | HTMLAudioElement, Media
                 </div>
 
                 {/* Controls bar */}
-                <div className="p-3 space-y-2">
-                    {/* Progress bar */}
+                <div className="p-2 space-y-1.5 sm:p-3 sm:space-y-2">
+                    {/* Progress bar — min 44px height for touch accessibility */}
                     <div
-                        className="group relative h-8 cursor-pointer rounded-lg bg-gray-100 overflow-hidden"
+                        className="group relative h-10 sm:h-8 cursor-pointer rounded-lg bg-gray-100 overflow-hidden"
                         onClick={handleProgressClick}
                     >
                         {/* Progress fill */}

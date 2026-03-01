@@ -2,7 +2,7 @@
 
 import { useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Scale, Download, Loader2, FileText, FileDown } from "lucide-react";
+import { ArrowLeft, Scale, Download, Loader2, FileText, FileDown, MessageSquare, FileAudio } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -23,9 +23,18 @@ interface EditorClientProps {
     utterances: Utterance[];
 }
 
+type MobileTab = "transcript" | "summary" | "chat";
+
+const MOBILE_TABS: { key: MobileTab; label: string; icon: React.ReactNode }[] = [
+    { key: "transcript", label: "Transcrição", icon: <FileAudio className="h-4 w-4" /> },
+    { key: "summary", label: "Resumo", icon: <FileText className="h-4 w-4" /> },
+    { key: "chat", label: "Chat", icon: <MessageSquare className="h-4 w-4" /> },
+];
+
 export function EditorClient({ transcription, utterances }: EditorClientProps) {
     const router = useRouter();
     const [exporting, setExporting] = useState<"docx" | "pdf" | null>(null);
+    const [activeTab, setActiveTab] = useState<MobileTab>("transcript");
 
     const handleExport = useCallback(async (format: "docx" | "pdf") => {
         setExporting(format);
@@ -71,27 +80,27 @@ export function EditorClient({ transcription, utterances }: EditorClientProps) {
     );
 
     return (
-        <div className="flex h-screen flex-col bg-background">
+        <div className="flex h-[100dvh] flex-col bg-background">
             {/* Header — compacto */}
             <header className="z-50 border-b border-border bg-white/80 backdrop-blur-xl">
-                <div className="flex h-12 items-center gap-3 px-4">
+                <div className="flex h-12 items-center gap-2 px-3 sm:gap-3 sm:px-4">
                     <Button
                         variant="ghost"
                         size="sm"
                         onClick={() => router.push("/dashboard")}
-                        className="text-muted-foreground hover:text-foreground"
+                        className="text-muted-foreground hover:text-foreground px-2 sm:px-3"
                     >
-                        <ArrowLeft className="mr-1 h-4 w-4" />
-                        Voltar
+                        <ArrowLeft className="h-4 w-4 sm:mr-1" />
+                        <span className="hidden sm:inline">Voltar</span>
                     </Button>
 
-                    <div className="h-5 w-px bg-border" />
+                    <div className="h-5 w-px bg-border hidden sm:block" />
 
                     <div className="flex items-center gap-2 min-w-0 flex-1">
                         <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md gradient-primary">
                             <Scale className="h-3.5 w-3.5 text-white" />
                         </div>
-                        <h1 className="truncate text-sm font-semibold text-foreground">
+                        <h1 className="truncate text-xs font-semibold text-foreground sm:text-sm">
                             {transcription.title}
                         </h1>
                     </div>
@@ -102,14 +111,16 @@ export function EditorClient({ transcription, utterances }: EditorClientProps) {
                                 variant="outline"
                                 size="sm"
                                 disabled={exporting !== null}
-                                className="ml-auto shrink-0 gap-1.5 text-xs"
+                                className="ml-auto shrink-0 gap-1.5 text-xs px-2 sm:px-3"
                             >
                                 {exporting ? (
                                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
                                 ) : (
                                     <Download className="h-3.5 w-3.5" />
                                 )}
-                                {exporting ? "Exportando..." : "Exportar"}
+                                <span className="hidden sm:inline">
+                                    {exporting ? "Exportando..." : "Exportar"}
+                                </span>
                             </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-44">
@@ -134,8 +145,8 @@ export function EditorClient({ transcription, utterances }: EditorClientProps) {
                 </div>
             </header>
 
-            {/* Layout 4 quadrantes — ocupa altura restante */}
-            <div className="flex-1 grid grid-cols-[3fr_2fr] grid-rows-[1.2fr_1fr] gap-3 p-3 min-h-0">
+            {/* ═══════ DESKTOP: Layout 4 quadrantes ═══════ */}
+            <div className="hidden md:grid flex-1 grid-cols-[3fr_2fr] grid-rows-[1.2fr_1fr] gap-3 p-3 min-h-0">
                 {/* ↖ Superior Esquerdo — Vídeo */}
                 <div className="min-h-0 min-w-0">
                     <MediaPlayer
@@ -178,6 +189,67 @@ export function EditorClient({ transcription, utterances }: EditorClientProps) {
                     <ChatPanel transcriptionId={transcription.id} />
                 </div>
             </div>
+
+            {/* ═══════ MOBILE: Layout vertical com tabs ═══════ */}
+            <div className="flex flex-1 flex-col min-h-0 md:hidden">
+                {/* Media player compacto */}
+                <div className="shrink-0 h-48 min-[480px]:h-56 p-2">
+                    <MediaPlayer
+                        ref={mediaRef}
+                        src={transcription.media_url ?? ""}
+                        currentTime={currentTime}
+                        duration={duration}
+                        isPlaying={isPlaying}
+                        onTogglePlay={togglePlay}
+                        onSeek={seekTo}
+                    />
+                </div>
+
+                {/* Tab bar */}
+                <div className="shrink-0 flex border-b border-border bg-white px-1">
+                    {MOBILE_TABS.map((tab) => (
+                        <button
+                            key={tab.key}
+                            onClick={() => setActiveTab(tab.key)}
+                            className={`flex flex-1 items-center justify-center gap-1.5 py-2.5 text-xs font-medium transition-colors ${activeTab === tab.key
+                                    ? "border-b-2 border-primary text-primary"
+                                    : "text-muted-foreground"
+                                }`}
+                        >
+                            {tab.icon}
+                            <span>{tab.label}</span>
+                        </button>
+                    ))}
+                </div>
+
+                {/* Tab content */}
+                <div className="flex-1 min-h-0 overflow-hidden" style={{ paddingBottom: "env(safe-area-inset-bottom)" }}>
+                    {activeTab === "transcript" && (
+                        <div className="h-full flex flex-col rounded-none border-0 bg-white">
+                            <div className="flex-1 overflow-y-auto min-h-0">
+                                <TranscriptPanel
+                                    utterances={utterances}
+                                    activeUtteranceId={activeUtteranceId}
+                                    onUtteranceClick={handleUtteranceClick}
+                                />
+                            </div>
+                        </div>
+                    )}
+
+                    {activeTab === "summary" && (
+                        <div className="h-full">
+                            <VideoSummary transcriptionId={transcription.id} />
+                        </div>
+                    )}
+
+                    {activeTab === "chat" && (
+                        <div className="h-full">
+                            <ChatPanel transcriptionId={transcription.id} />
+                        </div>
+                    )}
+                </div>
+            </div>
         </div>
     );
 }
+

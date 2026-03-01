@@ -255,7 +255,7 @@ export default function NewTranscriptionPage() {
                             </div>
 
                             {/* Pipeline steps */}
-                            <div className="border-t border-border px-4 py-3 grid grid-cols-4 gap-1 text-xs text-center">
+                            <div className="border-t border-border px-4 py-3 grid grid-cols-2 gap-1 text-xs text-center sm:grid-cols-4">
                                 <div className={progress >= 10 ? "text-foreground font-medium" : "text-muted-foreground"}>
                                     {progress >= 10 ? "✓" : "○"} Upload
                                 </div>

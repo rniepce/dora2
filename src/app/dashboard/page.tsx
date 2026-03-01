@@ -93,20 +93,20 @@ export default async function DashboardPage() {
     return (
         <div>
             {/* ─── Minhas Degravações ──────────────────────────────────── */}
-            <div className="mb-8 flex items-center justify-between">
+            <div className="mb-6 flex flex-col gap-3 sm:mb-8 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                    <h1 className="text-3xl font-bold tracking-tight text-foreground">
+                    <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
                         Degravações
                     </h1>
-                    <p className="mt-1 text-muted-foreground">
+                    <p className="mt-1 text-sm text-muted-foreground sm:text-base">
                         {items.length === 0
                             ? "Nenhuma degravação ainda"
-                            : `${items.length} degravação${items.length !== 1 ? "ões" : ""}`}
+                            : `${items.length} ${items.length !== 1 ? "degravações" : "degravação"}`}
                     </p>
                 </div>
 
                 <Link href="/dashboard/new">
-                    <Button className="gradient-primary font-semibold text-white shadow-md">
+                    <Button className="gradient-primary w-full font-semibold text-white shadow-md sm:w-auto">
                         <Plus className="mr-2 h-4 w-4" />
                         Nova Degravação
                     </Button>
@@ -126,7 +126,7 @@ export default async function DashboardPage() {
                     </Link>
                 </EmptyState>
             ) : (
-                <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3">
                     {items.map((t) => (
                         <TranscriptionCard key={t.id} transcription={t} />
                     ))}
@@ -145,12 +145,12 @@ export default async function DashboardPage() {
                                 Compartilhadas comigo
                             </h2>
                             <p className="text-sm text-muted-foreground">
-                                {sharedTranscriptions.length} degravação{sharedTranscriptions.length !== 1 ? "ões" : ""} recebida{sharedTranscriptions.length !== 1 ? "s" : ""}
+                                {sharedTranscriptions.length} {sharedTranscriptions.length !== 1 ? "degravações recebidas" : "degravação recebida"}
                             </p>
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3">
                         {sharedTranscriptions.map((t) => (
                             <TranscriptionCard key={`shared-${t.id}`} transcription={t} />
                         ))}

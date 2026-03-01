@@ -275,7 +275,7 @@ export function ChatPanel({ transcriptionId }: ChatPanelProps) {
             </div>
 
             {/* Input */}
-            <div className="border-t border-border p-3">
+            <div className="border-t border-border p-3" style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}>
                 <form onSubmit={handleSubmit} className="flex items-end gap-2">
                     <textarea
                         ref={inputRef}

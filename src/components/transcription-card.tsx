@@ -228,7 +228,7 @@ export function TranscriptionCard({ transcription }: { transcription: Transcript
                     {transcription.status === "completed" && (
                         <button
                             onClick={handleShareClick}
-                            className="absolute right-10 top-[88px] z-10 rounded-md p-1.5 text-muted-foreground/50 opacity-0 transition-all hover:bg-primary/10 hover:text-primary group-hover:opacity-100"
+                            className="absolute right-10 top-[88px] z-10 rounded-md p-1.5 text-muted-foreground/50 opacity-100 transition-all hover:bg-primary/10 hover:text-primary sm:opacity-0 sm:group-hover:opacity-100"
                             title="Compartilhar"
                         >
                             <Share2 className="h-3.5 w-3.5" />
@@ -239,7 +239,7 @@ export function TranscriptionCard({ transcription }: { transcription: Transcript
                     <button
                         onClick={handleDeleteClick}
                         disabled={deleting}
-                        className="absolute right-3 top-[88px] z-10 rounded-md p-1.5 text-muted-foreground/50 opacity-0 transition-all hover:bg-red-500/10 hover:text-red-500 group-hover:opacity-100"
+                        className="absolute right-3 top-[88px] z-10 rounded-md p-1.5 text-muted-foreground/50 opacity-100 transition-all hover:bg-red-500/10 hover:text-red-500 sm:opacity-0 sm:group-hover:opacity-100"
                         title="Apagar degravação"
                     >
                         <Trash2 className="h-3.5 w-3.5" />
