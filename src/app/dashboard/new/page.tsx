@@ -32,6 +32,8 @@ const ACCEPTED_AUDIO = ".mp3,.wav,.ogg,.m4a,.aac,.flac,.wma";
 const ACCEPTED_ALL = `${ACCEPTED_VIDEO},${ACCEPTED_AUDIO}`;
 
 const AUDIO_EXTENSIONS = new Set(["mp3", "wav", "ogg", "m4a", "aac", "flac", "wma"]);
+const MAX_FILE_SIZE = 1024 * 1024 * 1024; // 1 GB — deve ser igual ao limite do bucket Supabase
+
 function isAudioFile(filename: string): boolean {
     const ext = filename.split(".").pop()?.toLowerCase() ?? "";
     return AUDIO_EXTENSIONS.has(ext);
@@ -113,7 +115,16 @@ export default function NewTranscriptionPage() {
     // ─── File selection ──────────────────────────────────────────────────────
     const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
-        if (file) setSelectedFile(file);
+        if (file) {
+            if (file.size > MAX_FILE_SIZE) {
+                toast.error("Arquivo muito grande", {
+                    description: `O tamanho máximo permitido é ${formatBytes(MAX_FILE_SIZE)}. Seu arquivo tem ${formatBytes(file.size)}.`,
+                });
+                if (fileInputRef.current) fileInputRef.current.value = "";
+                return;
+            }
+            setSelectedFile(file);
+        }
     }, []);
 
     const clearFile = useCallback(() => {
@@ -384,7 +395,7 @@ export default function NewTranscriptionPage() {
                                         Clique para selecionar arquivo
                                     </p>
                                     <p className="mt-1 text-sm text-muted-foreground">
-                                        Vídeo (MP4, MKV, AVI, MOV) ou Áudio (MP3, WAV, M4A)
+                                        Vídeo (MP4, MKV, AVI, MOV) ou Áudio (MP3, WAV, M4A) — máx. 1 GB
                                     </p>
                                 </div>
                             ) : (

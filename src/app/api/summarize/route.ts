@@ -3,13 +3,14 @@ import { createServerClient } from "@/lib/supabase-server";
 
 /**
  * POST /api/summarize
- * Body: { transcriptionId: string }
+ * Body: { transcriptionId: string, force?: boolean }
  *
- * Gera um resumo da transcrição usando Azure GPT 5.2.
+ * Retorna o resumo salvo ou gera um novo usando Azure GPT 5.2.
+ * Quando `force: true`, sempre regenera via LLM e sobrescreve o cache.
  */
 export async function POST(request: Request) {
     try {
-        const { transcriptionId } = await request.json();
+        const { transcriptionId, force } = await request.json();
 
         if (!transcriptionId) {
             return NextResponse.json({ error: "transcriptionId é obrigatório" }, { status: 400 });
@@ -17,7 +18,20 @@ export async function POST(request: Request) {
 
         const supabase = await createServerClient();
 
-        // Buscar utterances
+        // ── 1. Verificar se já existe resumo salvo ──────────────────────────
+        if (!force) {
+            const { data: transcription } = await supabase
+                .from("transcriptions")
+                .select("summary")
+                .eq("id", transcriptionId)
+                .single();
+
+            if (transcription?.summary) {
+                return NextResponse.json({ summary: transcription.summary });
+            }
+        }
+
+        // ── 2. Buscar utterances para gerar o resumo ────────────────────────
         const { data: utterances, error: fetchError } = await supabase
             .from("utterances")
             .select("speaker_label, text, start_time")
@@ -39,6 +53,7 @@ export async function POST(request: Request) {
             transcriptText = transcriptText.substring(0, MAX_CHARS) + "\n\n[... transcrição truncada para resumo ...]";
         }
 
+        // ── 3. Chamar o LLM ────────────────────────────────────────────────
         const endpoint = process.env.AZURE_OPENAI_ENDPOINT!;
         const apiKey = process.env.AZURE_OPENAI_API_KEY!;
         const chatUrl = `${endpoint}/openai/deployments/gpt-5.2-chat/chat/completions?api-version=2024-06-01`;
@@ -84,6 +99,17 @@ Seja objetivo e direto. Use linguagem jurídica adequada, mas acessível. O resu
 
         const llmData = await llmRes.json();
         const summary = llmData.choices?.[0]?.message?.content ?? "Não foi possível gerar o resumo.";
+
+        // ── 4. Salvar o resumo no banco ─────────────────────────────────────
+        const { error: updateError } = await supabase
+            .from("transcriptions")
+            .update({ summary })
+            .eq("id", transcriptionId);
+
+        if (updateError) {
+            console.error("Failed to persist summary:", updateError);
+            // Não bloqueia — retorna o resumo mesmo sem salvar
+        }
 
         return NextResponse.json({ summary });
     } catch (err) {

@@ -55,14 +55,14 @@ export function VideoSummary({ transcriptionId }: VideoSummaryProps) {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
-    const fetchSummary = async () => {
+    const fetchSummary = async (force = false) => {
         setLoading(true);
         setError(null);
         try {
             const res = await fetch("/api/summarize", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ transcriptionId }),
+                body: JSON.stringify({ transcriptionId, force }),
             });
 
             if (!res.ok) {
@@ -97,7 +97,7 @@ export function VideoSummary({ transcriptionId }: VideoSummaryProps) {
                     <Button
                         variant="ghost"
                         size="sm"
-                        onClick={fetchSummary}
+                        onClick={() => fetchSummary(true)}
                         className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
                         title="Regenerar resumo"
                     >
@@ -119,7 +119,7 @@ export function VideoSummary({ transcriptionId }: VideoSummaryProps) {
                     <div className="flex flex-col items-center justify-center gap-3 py-8">
                         <AlertCircle className="h-6 w-6 text-destructive" />
                         <p className="text-sm text-destructive">{error}</p>
-                        <Button variant="outline" size="sm" onClick={fetchSummary}>
+                        <Button variant="outline" size="sm" onClick={() => fetchSummary()}>
                             Tentar novamente
                         </Button>
                     </div>
