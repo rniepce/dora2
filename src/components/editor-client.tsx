@@ -193,7 +193,7 @@ export function EditorClient({ transcription, utterances }: EditorClientProps) {
             {/* ═══════ MOBILE: Layout vertical com tabs ═══════ */}
             <div className="flex flex-1 flex-col min-h-0 md:hidden">
                 {/* Media player compacto */}
-                <div className="shrink-0 h-48 min-[480px]:h-56 p-2">
+                <div className="shrink-0 h-56 min-[480px]:h-64 p-2">
                     <MediaPlayer
                         ref={mediaRef}
                         src={transcription.media_url ?? ""}
@@ -212,8 +212,8 @@ export function EditorClient({ transcription, utterances }: EditorClientProps) {
                             key={tab.key}
                             onClick={() => setActiveTab(tab.key)}
                             className={`flex flex-1 items-center justify-center gap-1.5 py-2.5 text-xs font-medium transition-colors ${activeTab === tab.key
-                                    ? "border-b-2 border-primary text-primary"
-                                    : "text-muted-foreground"
+                                ? "border-b-2 border-primary text-primary"
+                                : "text-muted-foreground"
                                 }`}
                         >
                             {tab.icon}
