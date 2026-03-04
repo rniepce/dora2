@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Scale, Download, Loader2, FileText, FileDown, MessageSquare, FileAudio } from "lucide-react";
 
@@ -35,6 +35,20 @@ export function EditorClient({ transcription, utterances }: EditorClientProps) {
     const router = useRouter();
     const [exporting, setExporting] = useState<"docx" | "pdf" | null>(null);
     const [activeTab, setActiveTab] = useState<MobileTab>("transcript");
+    const [mediaUrl, setMediaUrl] = useState(transcription.media_url ?? "");
+
+    // Buscar signed URL para mídia (mais confiável para arquivos grandes/TUS)
+    useEffect(() => {
+        if (!transcription.id) return;
+        fetch(`/api/media/${transcription.id}`)
+            .then((res) => res.json())
+            .then((data) => {
+                if (data.url) setMediaUrl(data.url);
+            })
+            .catch(() => {
+                // fallback: manter a URL original
+            });
+    }, [transcription.id]);
 
     const handleExport = useCallback(async (format: "docx" | "pdf") => {
         setExporting(format);
@@ -151,7 +165,7 @@ export function EditorClient({ transcription, utterances }: EditorClientProps) {
                 <div className="min-h-0 min-w-0">
                     <MediaPlayer
                         ref={mediaRef}
-                        src={transcription.media_url ?? ""}
+                        src={mediaUrl}
                         currentTime={currentTime}
                         duration={duration}
                         isPlaying={isPlaying}
@@ -197,7 +211,7 @@ export function EditorClient({ transcription, utterances }: EditorClientProps) {
                 <div className="shrink-0 h-56 min-[480px]:h-64 p-2">
                     <MediaPlayer
                         ref={mediaRef}
-                        src={transcription.media_url ?? ""}
+                        src={mediaUrl}
                         currentTime={currentTime}
                         duration={duration}
                         isPlaying={isPlaying}
