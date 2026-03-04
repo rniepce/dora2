@@ -26,12 +26,14 @@ export function useTimeSync({ utterances }: UseTimeSyncOptions): UseTimeSyncRetu
     const [duration, setDuration] = useState(0);
     const [activeUtteranceId, setActiveUtteranceId] = useState<string | null>(null);
 
-    // Atualiza currentTime e determina a utterance ativa
+    // Atualiza currentTime via RAF para tracking suave (palavra a palavra)
     useEffect(() => {
         const media = mediaRef.current;
         if (!media) return;
 
-        const handleTimeUpdate = () => {
+        let rafId: number | null = null;
+
+        const tick = () => {
             const t = media.currentTime;
             setCurrentTime(t);
 
@@ -40,23 +42,50 @@ export function useTimeSync({ utterances }: UseTimeSyncOptions): UseTimeSyncRetu
                 (u) => t >= u.start_time && t <= u.end_time
             );
             setActiveUtteranceId(active?.id ?? null);
+
+            rafId = requestAnimationFrame(tick);
         };
 
-        const handlePlay = () => setIsPlaying(true);
-        const handlePause = () => setIsPlaying(false);
+        const handlePlay = () => {
+            setIsPlaying(true);
+            rafId = requestAnimationFrame(tick);
+        };
+        const handlePause = () => {
+            setIsPlaying(false);
+            if (rafId !== null) {
+                cancelAnimationFrame(rafId);
+                rafId = null;
+            }
+        };
+        const handleSeeked = () => {
+            // Update immediately on seek even if paused
+            const t = media.currentTime;
+            setCurrentTime(t);
+            const active = utterances.find(
+                (u) => t >= u.start_time && t <= u.end_time
+            );
+            setActiveUtteranceId(active?.id ?? null);
+        };
         const handleDurationChange = () => setDuration(media.duration || 0);
         const handleLoadedMetadata = () => setDuration(media.duration || 0);
 
-        media.addEventListener("timeupdate", handleTimeUpdate);
+        // If already playing on mount, start RAF loop
+        if (!media.paused) {
+            setIsPlaying(true);
+            rafId = requestAnimationFrame(tick);
+        }
+
         media.addEventListener("play", handlePlay);
         media.addEventListener("pause", handlePause);
+        media.addEventListener("seeked", handleSeeked);
         media.addEventListener("durationchange", handleDurationChange);
         media.addEventListener("loadedmetadata", handleLoadedMetadata);
 
         return () => {
-            media.removeEventListener("timeupdate", handleTimeUpdate);
+            if (rafId !== null) cancelAnimationFrame(rafId);
             media.removeEventListener("play", handlePlay);
             media.removeEventListener("pause", handlePause);
+            media.removeEventListener("seeked", handleSeeked);
             media.removeEventListener("durationchange", handleDurationChange);
             media.removeEventListener("loadedmetadata", handleLoadedMetadata);
         };

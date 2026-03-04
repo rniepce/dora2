@@ -174,6 +174,7 @@ export function EditorClient({ transcription, utterances }: EditorClientProps) {
                         <TranscriptPanel
                             utterances={utterances}
                             activeUtteranceId={activeUtteranceId}
+                            currentTime={currentTime}
                             onUtteranceClick={handleUtteranceClick}
                         />
                     </div>
@@ -230,6 +231,7 @@ export function EditorClient({ transcription, utterances }: EditorClientProps) {
                                 <TranscriptPanel
                                     utterances={utterances}
                                     activeUtteranceId={activeUtteranceId}
+                                    currentTime={currentTime}
                                     onUtteranceClick={handleUtteranceClick}
                                 />
                             </div>

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { Clock } from "lucide-react";
-import type { Utterance } from "@/lib/types";
+import type { Utterance, Word } from "@/lib/types";
 
 // Paleta TJMG — cores de fundo por tipo de locutor
 const SPEAKER_COLORS: Record<string, { bg: string; accent: string; label: string }> = {
@@ -37,25 +37,76 @@ function formatTimestamp(seconds: number): string {
 interface TranscriptPanelProps {
     utterances: Utterance[];
     activeUtteranceId: string | null;
+    currentTime: number;
     onUtteranceClick: (startTime: number) => void;
+}
+
+/* ─── Per-word highlighted text ─────────────────────────────────────────── */
+function HighlightedWords({
+    words,
+    currentTime,
+    isActiveUtterance,
+}: {
+    words: Word[];
+    currentTime: number;
+    isActiveUtterance: boolean;
+}) {
+    const activeWordRef = useRef<HTMLSpanElement>(null);
+
+    useEffect(() => {
+        if (isActiveUtterance && activeWordRef.current) {
+            activeWordRef.current.scrollIntoView({
+                behavior: "smooth",
+                block: "center",
+            });
+        }
+    }, [isActiveUtterance, currentTime]);
+
+    return (
+        <>
+            {words.map((w, i) => {
+                const isActive = isActiveUtterance && currentTime >= w.start && currentTime <= w.end;
+                return (
+                    <span
+                        key={`${w.start}-${i}`}
+                        ref={isActive ? activeWordRef : undefined}
+                        className={`transition-colors duration-100 ${isActive
+                            ? "bg-yellow-200 rounded-[3px] px-[1px] -mx-[1px]"
+                            : ""
+                            }`}
+                    >
+                        {w.word}
+                        {i < words.length - 1 ? " " : ""}
+                    </span>
+                );
+            })}
+        </>
+    );
 }
 
 export function TranscriptPanel({
     utterances,
     activeUtteranceId,
+    currentTime,
     onUtteranceClick,
 }: TranscriptPanelProps) {
     const activeRef = useRef<HTMLDivElement>(null);
 
-    // Auto-scroll para a utterance ativa
+    // Auto-scroll para a utterance ativa (fallback when no words)
+    const lastScrolledUtterance = useRef<string | null>(null);
     useEffect(() => {
-        if (activeRef.current) {
-            activeRef.current.scrollIntoView({
-                behavior: "smooth",
-                block: "center",
-            });
+        if (activeUtteranceId && activeUtteranceId !== lastScrolledUtterance.current) {
+            lastScrolledUtterance.current = activeUtteranceId;
+            // Only scroll utterance-level when there are no word-level spans handling it
+            const activeUtt = utterances.find(u => u.id === activeUtteranceId);
+            if (!activeUtt?.words?.length && activeRef.current) {
+                activeRef.current.scrollIntoView({
+                    behavior: "smooth",
+                    block: "center",
+                });
+            }
         }
-    }, [activeUtteranceId]);
+    }, [activeUtteranceId, utterances]);
 
     let lastSpeaker = "";
 
@@ -66,6 +117,8 @@ export function TranscriptPanel({
                 const color = getSpeakerColor(utterance.speaker_label);
                 const isNewSpeaker = utterance.speaker_label !== lastSpeaker;
                 lastSpeaker = utterance.speaker_label;
+
+                const hasWords = Array.isArray(utterance.words) && utterance.words.length > 0;
 
                 return (
                     <div key={utterance.id} ref={isActive ? activeRef : undefined}>
@@ -89,8 +142,8 @@ export function TranscriptPanel({
                         {/* Texto da fala */}
                         <div
                             className={`cursor-pointer px-4 py-1 transition-all duration-150 border-l-2 ${isActive
-                                    ? `${color.bg} border-l-2 ${color.accent.replace("bg-", "border-")} font-medium`
-                                    : "border-transparent hover:bg-gray-50/60"
+                                ? `${color.bg} border-l-2 ${color.accent.replace("bg-", "border-")} font-medium`
+                                : "border-transparent hover:bg-gray-50/60"
                                 }`}
                             onClick={() => onUtteranceClick(utterance.start_time)}
                         >
@@ -107,7 +160,15 @@ export function TranscriptPanel({
                                         {formatTimestamp(utterance.start_time)}
                                     </button>
                                 )}
-                                {utterance.text}
+                                {hasWords ? (
+                                    <HighlightedWords
+                                        words={utterance.words!}
+                                        currentTime={currentTime}
+                                        isActiveUtterance={isActive}
+                                    />
+                                ) : (
+                                    utterance.text
+                                )}
                             </p>
                         </div>
                     </div>
@@ -116,3 +177,4 @@ export function TranscriptPanel({
         </div>
     );
 }
+
