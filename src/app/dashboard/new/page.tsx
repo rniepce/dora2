@@ -15,6 +15,7 @@ import {
     AudioLines,
 } from "lucide-react";
 import { toast } from "sonner";
+import * as tus from "tus-js-client";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -159,21 +160,55 @@ export default function NewTranscriptionPage() {
             setProgress(8);
             setProgressLabel("Enviando arquivo...");
 
-            // 2. Upload para Supabase Storage
+            // 2. Upload resumível (TUS) para Supabase Storage — suporta arquivos grandes
             const supabase = createClient();
             const ext = selectedFile.name.split(".").pop()?.toLowerCase() ?? "mp3";
             const filePath = `${result.id}/media.${ext}`;
+            const bucketName = "media";
 
-            const { error: uploadError } = await supabase.storage
-                .from("media")
-                .upload(filePath, selectedFile, {
-                    contentType: selectedFile.type || "audio/mpeg",
-                    upsert: true,
+            const { data: { session } } = await supabase.auth.getSession();
+            const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+            const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+
+            await new Promise<void>((resolve, reject) => {
+                const upload = new tus.Upload(selectedFile, {
+                    endpoint: `${supabaseUrl}/storage/v1/upload/resumable`,
+                    retryDelays: [0, 1000, 3000, 5000],
+                    headers: {
+                        authorization: `Bearer ${session?.access_token ?? supabaseKey}`,
+                        "x-upsert": "true",
+                    },
+                    uploadDataDuringCreation: true,
+                    removeFingerprintOnSuccess: true,
+                    metadata: {
+                        bucketName,
+                        objectName: filePath,
+                        contentType: selectedFile.type || "audio/mpeg",
+                    },
+                    chunkSize: 6 * 1024 * 1024, // 6 MB por chunk
+                    onError: (error) => {
+                        reject(new Error(`Upload falhou: ${error.message}`));
+                    },
+                    onProgress: (bytesUploaded, bytesTotal) => {
+                        const pct = Math.round((bytesUploaded / bytesTotal) * 100);
+                        // Mapear 0-100% do upload para 8-12% do progresso geral
+                        const mappedProgress = 8 + Math.round((pct / 100) * 4);
+                        setProgress(mappedProgress);
+                        setProgressLabel(`Enviando arquivo... ${pct}%`);
+                    },
+                    onSuccess: () => {
+                        resolve();
+                    },
                 });
 
-            if (uploadError) {
-                throw new Error(`Upload falhou: ${uploadError.message}`);
-            }
+                // Verificar uploads anteriores incompletos
+                upload.findPreviousUploads().then((previousUploads) => {
+                    if (previousUploads.length) {
+                        upload.resumeFromPreviousUpload(previousUploads[0]);
+                    }
+                    upload.start();
+                });
+            });
 
             setProgress(12);
             setProgressLabel("Iniciando processamento...");
