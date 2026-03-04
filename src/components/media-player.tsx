@@ -27,8 +27,15 @@ function formatTime(seconds: number): string {
 const VIDEO_EXTENSIONS = new Set(["mp4", "mkv", "avi", "mov", "webm", "flv", "wmv"]);
 
 function isVideoUrl(url: string): boolean {
-    const ext = url.split(".").pop()?.toLowerCase()?.split("?")[0] ?? "";
-    return VIDEO_EXTENSIONS.has(ext);
+    try {
+        // Usar pathname para ignorar query params e tokens JWT (que contêm pontos)
+        const pathname = new URL(url, "https://placeholder.com").pathname;
+        const ext = pathname.split(".").pop()?.toLowerCase() ?? "";
+        return VIDEO_EXTENSIONS.has(ext);
+    } catch {
+        const ext = url.split(".").pop()?.toLowerCase()?.split("?")[0] ?? "";
+        return VIDEO_EXTENSIONS.has(ext);
+    }
 }
 
 export const MediaPlayer = forwardRef<HTMLVideoElement | HTMLAudioElement, MediaPlayerProps>(
