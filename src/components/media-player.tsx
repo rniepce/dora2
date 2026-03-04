@@ -63,6 +63,8 @@ export const MediaPlayer = forwardRef<HTMLVideoElement | HTMLAudioElement, Media
                             src={src}
                             preload="metadata"
                             className="h-full w-full object-contain"
+                            onError={(e) => console.error("[MediaPlayer] Video error:", (e.target as HTMLVideoElement).error)}
+                            onLoadedMetadata={() => console.log("[MediaPlayer] Video metadata loaded, src:", src.substring(0, 80))}
                         />
                     ) : (
                         <div className="flex flex-col items-center gap-3 text-white/60">
@@ -72,6 +74,7 @@ export const MediaPlayer = forwardRef<HTMLVideoElement | HTMLAudioElement, Media
                                 ref={ref as React.Ref<HTMLAudioElement>}
                                 src={src}
                                 preload="metadata"
+                                onError={(e) => console.error("[MediaPlayer] Audio error:", (e.target as HTMLAudioElement).error)}
                             />
                         </div>
                     )}
