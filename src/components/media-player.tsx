@@ -46,6 +46,8 @@ export const MediaPlayer = forwardRef<HTMLMediaElement, MediaPlayerProps>(
                         ref={ref as React.Ref<HTMLVideoElement>}
                         src={src}
                         preload="metadata"
+                        controls
+                        playsInline
                         className="h-full w-full object-contain"
                         onError={(e) => console.error("[MediaPlayer] Media error:", (e.target as HTMLVideoElement).error)}
                         onLoadedMetadata={() => console.log("[MediaPlayer] Metadata loaded, src:", src.substring(0, 100))}
