@@ -85,6 +85,7 @@ export const MediaPlayer = forwardRef<HTMLMediaElement, MediaPlayerProps>(
                             src={src}
                             preload="metadata"
                             playsInline
+                            controls
                             className="h-full w-full object-contain"
                         />
                     )}
