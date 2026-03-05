@@ -12,11 +12,13 @@ interface UseTimeSyncReturn {
     currentTime: number;
     isPlaying: boolean;
     duration: number;
+    playbackRate: number;
     activeUtteranceId: string | null;
     seekTo: (time: number) => void;
     togglePlay: () => void;
     play: () => void;
     pause: () => void;
+    setPlaybackRate: (rate: number) => void;
 }
 
 export function useTimeSync({ utterances }: UseTimeSyncOptions): UseTimeSyncReturn {
@@ -24,6 +26,7 @@ export function useTimeSync({ utterances }: UseTimeSyncOptions): UseTimeSyncRetu
     const [currentTime, setCurrentTime] = useState(0);
     const [isPlaying, setIsPlaying] = useState(false);
     const [duration, setDuration] = useState(0);
+    const [playbackRate, setPlaybackRateState] = useState(1);
     const [activeUtteranceId, setActiveUtteranceId] = useState<string | null>(null);
 
     // Atualiza currentTime via RAF para tracking suave (palavra a palavra)
@@ -67,7 +70,11 @@ export function useTimeSync({ utterances }: UseTimeSyncOptions): UseTimeSyncRetu
             setActiveUtteranceId(active?.id ?? null);
         };
         const handleDurationChange = () => setDuration(media.duration || 0);
-        const handleLoadedMetadata = () => setDuration(media.duration || 0);
+        const handleLoadedMetadata = () => {
+            setDuration(media.duration || 0);
+            media.playbackRate = playbackRate; // restore rate after load
+        };
+        const handleRateChange = () => setPlaybackRateState(media.playbackRate);
 
         // If already playing on mount, start RAF loop
         if (!media.paused) {
@@ -80,6 +87,7 @@ export function useTimeSync({ utterances }: UseTimeSyncOptions): UseTimeSyncRetu
         media.addEventListener("seeked", handleSeeked);
         media.addEventListener("durationchange", handleDurationChange);
         media.addEventListener("loadedmetadata", handleLoadedMetadata);
+        media.addEventListener("ratechange", handleRateChange);
 
         return () => {
             if (rafId !== null) cancelAnimationFrame(rafId);
@@ -88,6 +96,7 @@ export function useTimeSync({ utterances }: UseTimeSyncOptions): UseTimeSyncRetu
             media.removeEventListener("seeked", handleSeeked);
             media.removeEventListener("durationchange", handleDurationChange);
             media.removeEventListener("loadedmetadata", handleLoadedMetadata);
+            media.removeEventListener("ratechange", handleRateChange);
         };
     }, [utterances]);
 
@@ -118,15 +127,23 @@ export function useTimeSync({ utterances }: UseTimeSyncOptions): UseTimeSyncRetu
         mediaRef.current?.pause();
     }, []);
 
+    const setPlaybackRate = useCallback((rate: number) => {
+        const media = mediaRef.current;
+        if (media) media.playbackRate = rate;
+        setPlaybackRateState(rate);
+    }, []);
+
     return {
         mediaRef,
         currentTime,
         isPlaying,
         duration,
+        playbackRate,
         activeUtteranceId,
         seekTo,
         togglePlay,
         play,
         pause,
+        setPlaybackRate,
     };
 }
