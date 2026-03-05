@@ -1,7 +1,7 @@
 "use client";
 
 import { forwardRef } from "react";
-import { Play, Pause, SkipBack, SkipForward, Volume2 } from "lucide-react";
+import { Play, Pause, SkipBack, SkipForward } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 interface MediaPlayerProps {
@@ -24,24 +24,9 @@ function formatTime(seconds: number): string {
     return `${m}:${String(s).padStart(2, "0")}`;
 }
 
-const VIDEO_EXTENSIONS = new Set(["mp4", "mkv", "avi", "mov", "webm", "flv", "wmv"]);
-
-function isVideoUrl(url: string): boolean {
-    try {
-        // Usar pathname para ignorar query params e tokens JWT (que contêm pontos)
-        const pathname = new URL(url, "https://placeholder.com").pathname;
-        const ext = pathname.split(".").pop()?.toLowerCase() ?? "";
-        return VIDEO_EXTENSIONS.has(ext);
-    } catch {
-        const ext = url.split(".").pop()?.toLowerCase()?.split("?")[0] ?? "";
-        return VIDEO_EXTENSIONS.has(ext);
-    }
-}
-
-export const MediaPlayer = forwardRef<HTMLVideoElement | HTMLAudioElement, MediaPlayerProps>(
+export const MediaPlayer = forwardRef<HTMLMediaElement, MediaPlayerProps>(
     function MediaPlayer({ src, currentTime, duration, isPlaying, onTogglePlay, onSeek }, ref) {
         const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
-        const isVideo = isVideoUrl(src);
 
         const handleProgressClick = (e: React.MouseEvent<HTMLDivElement>) => {
             const rect = e.currentTarget.getBoundingClientRect();
@@ -55,29 +40,16 @@ export const MediaPlayer = forwardRef<HTMLVideoElement | HTMLAudioElement, Media
 
         return (
             <div className="flex h-full flex-col rounded-xl border border-border bg-white shadow-sm overflow-hidden">
-                {/* Media element — ocupa o espaço disponível */}
+                {/* Media element — sempre usa <video> que toca vídeo e áudio */}
                 <div className="flex-1 min-h-0 bg-black flex items-center justify-center">
-                    {isVideo ? (
-                        <video
-                            ref={ref as React.Ref<HTMLVideoElement>}
-                            src={src}
-                            preload="metadata"
-                            className="h-full w-full object-contain"
-                            onError={(e) => console.error("[MediaPlayer] Video error:", (e.target as HTMLVideoElement).error)}
-                            onLoadedMetadata={() => console.log("[MediaPlayer] Video metadata loaded, src:", src.substring(0, 80))}
-                        />
-                    ) : (
-                        <div className="flex flex-col items-center gap-3 text-white/60">
-                            <Volume2 className="h-12 w-12" />
-                            <p className="text-sm">Áudio</p>
-                            <audio
-                                ref={ref as React.Ref<HTMLAudioElement>}
-                                src={src}
-                                preload="metadata"
-                                onError={(e) => console.error("[MediaPlayer] Audio error:", (e.target as HTMLAudioElement).error)}
-                            />
-                        </div>
-                    )}
+                    <video
+                        ref={ref as React.Ref<HTMLVideoElement>}
+                        src={src}
+                        preload="metadata"
+                        className="h-full w-full object-contain"
+                        onError={(e) => console.error("[MediaPlayer] Media error:", (e.target as HTMLVideoElement).error)}
+                        onLoadedMetadata={() => console.log("[MediaPlayer] Metadata loaded, src:", src.substring(0, 100))}
+                    />
                 </div>
 
                 {/* Controls bar */}
