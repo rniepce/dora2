@@ -32,6 +32,12 @@ export async function POST(request: Request) {
 
         const supabase = await createServerClient();
 
+        // ── Auth guard ──────────────────────────────────────────────────────
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+            return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
+        }
+
         // 1. Buscar a degravação
         const { data: transcription, error: fetchError } = await supabase
             .from("transcriptions")

@@ -27,7 +27,14 @@ export async function POST(request: Request) {
         }
 
         const supabase = await createServerClient();
-        console.log(`[Process] Starting pipeline for ${transcriptionId} with engine: ${engine}`);
+
+        // ── Auth guard ──────────────────────────────────────────────────────
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+            return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
+        }
+
+        console.log(`[Process] Starting pipeline for ${transcriptionId} (user: ${user.id}) with engine: ${engine}`);
 
         // 1. Transcrição
         try {

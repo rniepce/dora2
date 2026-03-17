@@ -13,6 +13,12 @@ export async function GET(
     const { id } = await params;
     const supabase = await createServerClient();
 
+    // ── Auth guard ──────────────────────────────────────────────────────
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+        return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
+    }
+
     // 1. Buscar a transcrição para obter o media_url
     const { data: transcription, error } = await supabase
         .from("transcriptions")
@@ -26,6 +32,21 @@ export async function GET(
             { error: "Transcrição ou mídia não encontrada" },
             { status: 404 }
         );
+    }
+
+    // ── Ownership check ─────────────────────────────────────────────────
+    if (transcription.user_id !== user.id) {
+        // Verificar se foi compartilhada
+        const { data: shared } = await supabase
+            .from("shared_transcriptions")
+            .select("id")
+            .eq("transcription_id", id)
+            .eq("shared_with", user.id)
+            .limit(1);
+
+        if (!shared || shared.length === 0) {
+            return NextResponse.json({ error: "Acesso negado" }, { status: 403 });
+        }
     }
 
     console.log("[/api/media] media_url from DB:", transcription.media_url);
