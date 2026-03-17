@@ -13,6 +13,7 @@ import {
     X,
     Mic,
     AudioLines,
+    Globe,
 } from "lucide-react";
 import { toast } from "sonner";
 import * as tus from "tus-js-client";
@@ -55,7 +56,7 @@ export default function NewTranscriptionPage() {
     // Form
     const [title, setTitle] = useState("");
     const [glossary, setGlossary] = useState("");
-    const [engine, setEngine] = useState<"whisper" | "deepgram">("deepgram");
+    const [engine, setEngine] = useState<"whisper" | "deepgram" | "google">("deepgram");
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
     // Pipeline
@@ -309,7 +310,7 @@ export default function NewTranscriptionPage() {
                                     {progress >= 25 ? "✓" : progress >= 15 ? "◌" : "○"} Conversão
                                 </div>
                                 <div className={progress >= 55 ? "text-foreground font-medium" : "text-muted-foreground"}>
-                                    {progress >= 55 ? "✓" : progress >= 35 ? "◌" : "○"} {engine === "deepgram" ? "Deepgram" : "Whisper"}
+                                    {progress >= 55 ? "✓" : progress >= 35 ? "◌" : "○"} {engine === "deepgram" ? "Deepgram" : engine === "google" ? "Chirp 3" : "Whisper"}
                                 </div>
                                 <div className={progress >= 100 ? "text-foreground font-medium" : "text-muted-foreground"}>
                                     {progress >= 100 ? "✓" : progress >= 70 ? "◌" : "○"} IA Format
@@ -369,7 +370,7 @@ export default function NewTranscriptionPage() {
                         {/* Engine selector */}
                         <div className="space-y-2">
                             <Label>Motor de Transcrição</Label>
-                            <div className="grid grid-cols-2 gap-3">
+                            <div className="grid grid-cols-3 gap-3">
                                 <button
                                     type="button"
                                     onClick={() => setEngine("whisper")}
@@ -405,7 +406,27 @@ export default function NewTranscriptionPage() {
                                             Deepgram Nova-3
                                         </p>
                                         <p className="mt-0.5 text-[11px] text-muted-foreground">
-                                            Alta precisão + diarização nativa
+                                            Alta precisão + diarização
+                                        </p>
+                                    </div>
+                                </button>
+
+                                <button
+                                    type="button"
+                                    onClick={() => setEngine("google")}
+                                    disabled={isProcessing || isDone}
+                                    className={`flex flex-col items-center gap-2 rounded-xl border-2 p-4 text-center transition-all ${engine === "google"
+                                        ? "border-primary bg-red-50/50 shadow-sm"
+                                        : "border-border hover:border-primary/30 hover:bg-gray-50"
+                                        }`}
+                                >
+                                    <Globe className={`h-6 w-6 ${engine === "google" ? "text-primary" : "text-muted-foreground"}`} />
+                                    <div>
+                                        <p className={`text-sm font-semibold ${engine === "google" ? "text-foreground" : "text-muted-foreground"}`}>
+                                            Google Chirp 3
+                                        </p>
+                                        <p className="mt-0.5 text-[11px] text-muted-foreground">
+                                            Multilíngue + denoiser
                                         </p>
                                     </div>
                                 </button>

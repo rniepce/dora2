@@ -36,7 +36,7 @@ export interface Transcription {
     media_url: string | null;
     glossary: string | null;
     summary: string | null;
-    engine: "whisper" | "deepgram";
+    engine: "whisper" | "deepgram" | "google";
     created_at: string;
     updated_at: string;
     // Campos computados (aggregate)

@@ -29,7 +29,7 @@ export async function GET(
             return NextResponse.json({ error: "Não encontrado" }, { status: 404 });
         }
 
-        const engineLabel = data.engine === "deepgram" ? "Deepgram Nova-3" : "Whisper";
+        const engineLabel = data.engine === "deepgram" ? "Deepgram Nova-3" : data.engine === "google" ? "Google Chirp 3" : "Whisper";
 
         // Mapear status para label e progresso estimado (fallback se progress for null)
         const statusMap: Record<string, { label: string; fallbackProgress: number }> = {

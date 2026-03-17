@@ -14,6 +14,7 @@ import {
     Trash2,
     Mic,
     AudioLines,
+    Globe,
     MessageSquareText,
     Share2,
     Users,
@@ -105,8 +106,8 @@ export function TranscriptionCard({ transcription }: { transcription: Transcript
         setShareOpen(true);
     };
 
-    const engineLabel = transcription.engine === "deepgram" ? "Deepgram" : "Whisper";
-    const EngineIcon = transcription.engine === "deepgram" ? AudioLines : Mic;
+    const engineLabel = transcription.engine === "deepgram" ? "Deepgram" : transcription.engine === "google" ? "Chirp 3" : "Whisper";
+    const EngineIcon = transcription.engine === "deepgram" ? AudioLines : transcription.engine === "google" ? Globe : Mic;
     const segmentCount = transcription.utterance_count ?? 0;
 
     const card = (
