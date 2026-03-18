@@ -108,15 +108,12 @@ export function TranscriptPanel({
         }
     }, [activeUtteranceId, utterances]);
 
-    let lastSpeaker = "";
-
     return (
         <div className="transcript-continuous">
-            {utterances.map((utterance) => {
+            {utterances.map((utterance, index) => {
                 const isActive = utterance.id === activeUtteranceId;
                 const color = getSpeakerColor(utterance.speaker_label);
-                const isNewSpeaker = utterance.speaker_label !== lastSpeaker;
-                lastSpeaker = utterance.speaker_label;
+                const isNewSpeaker = index === 0 || utterance.speaker_label !== utterances[index - 1].speaker_label;
 
                 const hasWords = Array.isArray(utterance.words) && utterance.words.length > 0;
 

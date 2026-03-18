@@ -205,8 +205,8 @@ export function ChatPanel({ transcriptionId }: ChatPanelProps) {
             {/* Header */}
             <div className="flex items-center justify-between border-b border-border px-4 py-3">
                 <div className="flex items-center gap-2">
-                    <div className="flex h-7 w-7 items-center justify-center rounded-md gradient-primary">
-                        <MessageSquare className="h-3.5 w-3.5 text-white" />
+                    <div className="flex h-7 w-7 items-center justify-center rounded-md bg-red-50 text-[#841b2d]">
+                        <MessageSquare className="h-3.5 w-3.5" />
                     </div>
                     <h3 className="text-sm font-semibold text-foreground">Chat</h3>
                 </div>
@@ -245,18 +245,18 @@ export function ChatPanel({ transcriptionId }: ChatPanelProps) {
                             className={`flex gap-2 ${message.role === "user" ? "justify-end" : "justify-start"}`}
                         >
                             {message.role === "assistant" && (
-                                <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 mt-0.5">
-                                    <Bot className="h-3.5 w-3.5 text-primary" />
+                                <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-red-50 mt-0.5">
+                                    <Bot className="h-3.5 w-3.5 text-[#841b2d]" />
                                 </div>
                             )}
                             <div
                                 className={`max-w-[85%] rounded-xl px-3 py-2 text-sm leading-relaxed ${message.role === "user"
-                                    ? "gradient-primary text-white"
+                                    ? "bg-[#841b2d] text-white"
                                     : "bg-gray-50 text-foreground border border-border/50"
                                     }`}
                             >
                                 {!message.content ? (
-                                    <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                                    <Loader2 className="h-4 w-4 animate-spin text-[#841b2d]" />
                                 ) : message.role === "assistant" ? (
                                     renderMarkdown(message.content)
                                 ) : (
@@ -264,8 +264,8 @@ export function ChatPanel({ transcriptionId }: ChatPanelProps) {
                                 )}
                             </div>
                             {message.role === "user" && (
-                                <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 mt-0.5">
-                                    <User className="h-3.5 w-3.5 text-primary" />
+                                <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-red-50 mt-0.5">
+                                    <User className="h-3.5 w-3.5 text-[#841b2d]" />
                                 </div>
                             )}
                         </div>
@@ -283,7 +283,7 @@ export function ChatPanel({ transcriptionId }: ChatPanelProps) {
                         onChange={(e) => setInput(e.target.value)}
                         onKeyDown={handleKeyDown}
                         placeholder="Pergunte sobre a audiência..."
-                        className="flex-1 resize-none rounded-lg border border-border bg-gray-50 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary/40 focus:outline-none focus:ring-1 focus:ring-primary/20"
+                        className="flex-1 resize-none rounded-lg border border-border bg-gray-50 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-[#841b2d]/40 focus:outline-none focus:ring-1 focus:ring-[#841b2d]/20"
                         rows={1}
                         disabled={isStreaming}
                     />
@@ -291,7 +291,7 @@ export function ChatPanel({ transcriptionId }: ChatPanelProps) {
                         type="submit"
                         size="icon"
                         disabled={!input.trim() || isStreaming}
-                        className="h-9 w-9 shrink-0 rounded-lg gradient-primary text-white shadow-sm disabled:opacity-40"
+                        className="h-9 w-9 shrink-0 rounded-lg bg-[#841b2d] hover:bg-[#6b1624] text-white shadow-sm disabled:opacity-40"
                     >
                         {isStreaming ? (
                             <Loader2 className="h-4 w-4 animate-spin" />

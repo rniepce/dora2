@@ -253,33 +253,48 @@ export default function NewTranscriptionPage() {
     }, [selectedFile, title, glossary, engine, router]);
 
     return (
-        <div>
-            {/* Back */}
-            <Button
-                variant="ghost"
-                className="mb-6 text-muted-foreground hover:text-foreground"
-                onClick={() => router.push("/dashboard")}
-                disabled={isProcessing}
-            >
-                <ArrowLeft className="mr-2 h-4 w-4" />
-                Voltar ao Dashboard
-            </Button>
+        <div className="flex flex-col h-full max-w-4xl mx-auto py-4">
+            {/* Top Navigation */}
+            <div className="flex justify-between items-center mb-6">
+                <Button
+                    variant="ghost"
+                    className="text-muted-foreground hover:text-foreground"
+                    onClick={() => router.push("/dashboard")}
+                    disabled={isProcessing}
+                >
+                    <ArrowLeft className="mr-2 h-4 w-4" />
+                    Voltar ao Dashboard
+                </Button>
+                <div className="text-sm font-medium text-foreground">
+                    Nova Degravação - Passo 2 de 3
+                </div>
+            </div>
 
-            <div className="mx-auto max-w-2xl">
-                <div className="mb-8">
-                    <h1 className="text-3xl font-bold tracking-tight text-foreground">
-                        Nova Degravação
-                    </h1>
-                    <p className="mt-1 text-muted-foreground">
-                        Envie o vídeo ou áudio da audiência para transcrição automática.
-                    </p>
+            {/* Main Card */}
+            <Card className="border-border bg-white shadow-sm overflow-hidden p-0 rounded-2xl w-full mx-auto sm:max-w-2xl">
+                {/* Progress Tabs (Visual Only for Mockup match) */}
+                <div className="flex border-b pt-6 px-6">
+                    <div className="flex-1 text-center pb-3 border-b-[3px] border-[#841b2d] text-foreground font-semibold -mb-[2px] z-10 transition-colors">
+                        1. Detalhes
+                    </div>
+                    <div className="flex-1 text-center pb-3 text-muted-foreground font-medium border-b-[3px] border-transparent -mb-[2px] z-10">
+                        2. Configurações
+                    </div>
+                    <div className="flex-1 text-center pb-3 text-muted-foreground font-medium border-b-[3px] border-transparent -mb-[2px] z-10">
+                        3. Arquivo
+                    </div>
                 </div>
 
-                {/* Progress Card (real-time) */}
-                {(isProcessing || isDone || isError) && (
-                    <Card className="mb-6 border-border bg-white shadow-sm overflow-hidden">
-                        <CardContent className="p-0">
-                            {/* Progress header */}
+                <CardHeader className="pt-8 pb-4">
+                    <CardTitle className="text-3xl font-bold">Nova Degravação</CardTitle>
+                    <CardDescription className="text-sm mt-1">
+                        Detalhes da Audiência
+                    </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                    {/* Progress Card (real-time) */}
+                    {(isProcessing || isDone || isError) && (
+                        <div className="mb-6 border rounded-xl overflow-hidden bg-gray-50/50">
                             <div className="flex items-center justify-between p-4 pb-2">
                                 <span className="flex items-center gap-2 text-sm font-medium">
                                     {isDone ? (
@@ -295,225 +310,210 @@ export default function NewTranscriptionPage() {
                                     {progress}%
                                 </span>
                             </div>
-
-                            {/* Progress bar */}
                             <div className="px-4 pb-3">
-                                <Progress value={progress} className="h-3" />
+                                <Progress value={progress} className="h-2" />
                             </div>
-
-                            {/* Pipeline steps */}
-                            <div className="border-t border-border px-4 py-3 grid grid-cols-2 gap-1 text-xs text-center sm:grid-cols-4">
+                            <div className="border-t border-border px-4 py-3 grid grid-cols-4 gap-1 text-xs text-center">
                                 <div className={progress >= 10 ? "text-foreground font-medium" : "text-muted-foreground"}>
-                                    {progress >= 10 ? "✓" : "○"} Upload
+                                    Upload
                                 </div>
                                 <div className={progress >= 25 ? "text-foreground font-medium" : "text-muted-foreground"}>
-                                    {progress >= 25 ? "✓" : progress >= 15 ? "◌" : "○"} Conversão
+                                    Conversão
                                 </div>
                                 <div className={progress >= 55 ? "text-foreground font-medium" : "text-muted-foreground"}>
-                                    {progress >= 55 ? "✓" : progress >= 35 ? "◌" : "○"} {engine === "deepgram" ? "Deepgram" : engine === "google" ? "Chirp 3" : "Whisper"}
+                                    {engine === "deepgram" ? "Deepgram" : engine === "google" ? "Chirp 3" : "Whisper"}
                                 </div>
                                 <div className={progress >= 100 ? "text-foreground font-medium" : "text-muted-foreground"}>
-                                    {progress >= 100 ? "✓" : progress >= 70 ? "◌" : "○"} IA Format
+                                    Format
                                 </div>
                             </div>
-
                             {isError && errorMsg && (
-                                <div className="border-t border-border px-4 py-2">
-                                    <p className="text-sm text-red-600">{errorMsg}</p>
+                                <div className="border-t border-red-100 px-4 py-3 bg-red-50/50">
+                                    <p className="text-sm text-red-600 font-medium">{errorMsg}</p>
                                 </div>
                             )}
-                        </CardContent>
-                    </Card>
-                )}
+                        </div>
+                    )}
 
-                {/* Form */}
-                <Card className="border-border bg-white shadow-sm">
-                    <CardHeader>
-                        <CardTitle>Detalhes da Audiência</CardTitle>
-                        <CardDescription>
-                            Preencha as informações e selecione o arquivo de mídia.
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-6">
-                        {/* Title */}
-                        <div className="space-y-2">
-                            <Label htmlFor="title">Título / Nº do Processo *</Label>
-                            <Input
-                                id="title"
-                                value={title}
-                                onChange={(e) => setTitle(e.target.value)}
-                                placeholder="Ex: Processo nº 12345-67.2024.8.13.0001"
+                    {/* Title */}
+                    <div className="space-y-2">
+                        <Label htmlFor="title" className="font-semibold text-foreground">Número do Processo *</Label>
+                        <Input
+                            id="title"
+                            value={title}
+                            onChange={(e) => setTitle(e.target.value)}
+                            placeholder="Ex: 12345-67.2024.8.13.0001"
+                            disabled={isProcessing || isDone}
+                            className="bg-gray-50/50 border-gray-200 shadow-none h-11"
+                        />
+                    </div>
+
+                    {/* Glossary */}
+                    <div className="space-y-2">
+                        <Label htmlFor="glossary" className="font-semibold text-foreground">
+                            Palavras-chave <span className="font-normal text-muted-foreground">(opcional)</span>
+                        </Label>
+                        <Input
+                            id="glossary"
+                            value={glossary}
+                            onChange={(e) => setGlossary(e.target.value)}
+                            placeholder="Nomes do juiz, partes, testemunhas, termos técnicos..."
+                            disabled={isProcessing || isDone}
+                            className="bg-gray-50/50 border-gray-200 shadow-none h-11"
+                        />
+                    </div>
+
+                    {/* Engine selector */}
+                    <div className="space-y-2 pt-2">
+                        <Label className="font-semibold text-foreground">Motor de Transcrição</Label>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <button
+                                type="button"
+                                onClick={() => setEngine("whisper")}
                                 disabled={isProcessing || isDone}
-                            />
-                        </div>
-
-                        {/* Glossary */}
-                        <div className="space-y-2">
-                            <Label htmlFor="glossary">
-                                Glossário Prévio{" "}
-                                <span className="text-muted-foreground font-normal">(opcional)</span>
-                            </Label>
-                            <Textarea
-                                id="glossary"
-                                value={glossary}
-                                onChange={(e) => setGlossary(e.target.value)}
-                                placeholder="Nomes do juiz, partes, testemunhas, termos técnicos..."
-                                rows={3}
-                                disabled={isProcessing || isDone}
-                                className="resize-none"
-                            />
-                            <p className="text-xs text-muted-foreground">
-                                Esses termos melhoram a precisão da transcrição.
-                            </p>
-                        </div>
-
-                        {/* Engine selector */}
-                        <div className="space-y-2">
-                            <Label>Motor de Transcrição</Label>
-                            <div className="grid grid-cols-3 gap-3">
-                                <button
-                                    type="button"
-                                    onClick={() => setEngine("whisper")}
-                                    disabled={isProcessing || isDone}
-                                    className={`flex flex-col items-center gap-2 rounded-xl border-2 p-4 text-center transition-all ${engine === "whisper"
-                                        ? "border-primary bg-red-50/50 shadow-sm"
-                                        : "border-border hover:border-primary/30 hover:bg-gray-50"
-                                        }`}
-                                >
-                                    <Mic className={`h-6 w-6 ${engine === "whisper" ? "text-primary" : "text-muted-foreground"}`} />
-                                    <div>
-                                        <p className={`text-sm font-semibold ${engine === "whisper" ? "text-foreground" : "text-muted-foreground"}`}>
-                                            Azure Whisper
-                                        </p>
-                                        <p className="mt-0.5 text-[11px] text-muted-foreground">
-                                            Modelo generalista OpenAI
-                                        </p>
-                                    </div>
-                                </button>
-
-                                <button
-                                    type="button"
-                                    onClick={() => setEngine("deepgram")}
-                                    disabled={isProcessing || isDone}
-                                    className={`flex flex-col items-center gap-2 rounded-xl border-2 p-4 text-center transition-all ${engine === "deepgram"
-                                        ? "border-primary bg-red-50/50 shadow-sm"
-                                        : "border-border hover:border-primary/30 hover:bg-gray-50"
-                                        }`}
-                                >
-                                    <AudioLines className={`h-6 w-6 ${engine === "deepgram" ? "text-primary" : "text-muted-foreground"}`} />
-                                    <div>
-                                        <p className={`text-sm font-semibold ${engine === "deepgram" ? "text-foreground" : "text-muted-foreground"}`}>
-                                            Deepgram Nova-3
-                                        </p>
-                                        <p className="mt-0.5 text-[11px] text-muted-foreground">
-                                            Alta precisão + diarização
-                                        </p>
-                                    </div>
-                                </button>
-
-                                <button
-                                    type="button"
-                                    onClick={() => setEngine("google")}
-                                    disabled={isProcessing || isDone}
-                                    className={`flex flex-col items-center gap-2 rounded-xl border-2 p-4 text-center transition-all ${engine === "google"
-                                        ? "border-primary bg-red-50/50 shadow-sm"
-                                        : "border-border hover:border-primary/30 hover:bg-gray-50"
-                                        }`}
-                                >
-                                    <Globe className={`h-6 w-6 ${engine === "google" ? "text-primary" : "text-muted-foreground"}`} />
-                                    <div>
-                                        <p className={`text-sm font-semibold ${engine === "google" ? "text-foreground" : "text-muted-foreground"}`}>
-                                            Google Chirp 3
-                                        </p>
-                                        <p className="mt-0.5 text-[11px] text-muted-foreground">
-                                            Multilíngue + denoiser
-                                        </p>
-                                    </div>
-                                </button>
-                            </div>
-                        </div>
-
-                        <Separator />
-
-                        {/* File upload */}
-                        <div className="space-y-2">
-                            <Label>Arquivo de mídia *</Label>
-
-                            {!selectedFile ? (
-                                <div
-                                    className="group cursor-pointer rounded-xl border-2 border-dashed border-border p-8 text-center transition-all hover:border-primary/40 hover:bg-red-50/30"
-                                    onClick={() => fileInputRef.current?.click()}
-                                >
-                                    <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-red-50 text-primary transition-colors group-hover:bg-red-100">
-                                        <Upload className="h-6 w-6" />
-                                    </div>
-                                    <p className="font-medium text-foreground">
-                                        Clique para selecionar arquivo
+                                className={`flex flex-col items-center justify-center gap-1.5 rounded-xl border p-4 text-center transition-all min-h-[90px] ${engine === "whisper"
+                                    ? "border-[#841b2d] bg-red-50/30"
+                                    : "border-border hover:border-[#841b2d]/30 hover:bg-gray-50"
+                                    }`}
+                            >
+                                <Mic className={`h-5 w-5 ${engine === "whisper" ? "text-[#841b2d]" : "text-muted-foreground"}`} />
+                                <div className="space-y-0.5">
+                                    <p className={`text-[13px] font-semibold ${engine === "whisper" ? "text-foreground" : "text-muted-foreground"}`}>
+                                        Azure Whisper
                                     </p>
-                                    <p className="mt-1 text-sm text-muted-foreground">
-                                        Vídeo (MP4, MKV, AVI, MOV) ou Áudio (MP3, WAV, M4A) — máx. 1 GB
+                                    <p className="text-[10px] text-muted-foreground leading-tight">
+                                        Modelo generalista OpenAI
                                     </p>
                                 </div>
-                            ) : (
-                                <div className="flex items-center gap-3 rounded-xl border border-border bg-gray-50 p-4">
-                                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-red-50 text-primary">
-                                        {isAudioFile(selectedFile.name) ? (
-                                            <Music className="h-5 w-5" />
-                                        ) : (
-                                            <FileVideo className="h-5 w-5" />
-                                        )}
-                                    </div>
-                                    <div className="min-w-0 flex-1">
-                                        <p className="truncate font-medium text-foreground">{selectedFile.name}</p>
-                                        <p className="text-xs text-muted-foreground">{formatBytes(selectedFile.size)}</p>
-                                    </div>
-                                    {!isProcessing && !isDone && (
-                                        <Button variant="ghost" size="sm" onClick={clearFile} className="text-muted-foreground hover:text-foreground">
-                                            <X className="h-4 w-4" />
-                                        </Button>
+                            </button>
+
+                            <button
+                                type="button"
+                                onClick={() => setEngine("deepgram")}
+                                disabled={isProcessing || isDone}
+                                className={`flex flex-col items-center justify-center gap-1.5 rounded-xl border p-4 text-center transition-all min-h-[90px] ${engine === "deepgram"
+                                    ? "border-[#841b2d] bg-red-50/30"
+                                    : "border-border hover:border-[#841b2d]/30 hover:bg-gray-50"
+                                    }`}
+                            >
+                                <AudioLines className={`h-5 w-5 ${engine === "deepgram" ? "text-[#841b2d]" : "text-muted-foreground"}`} />
+                                <div className="space-y-0.5">
+                                    <p className={`text-[13px] font-semibold ${engine === "deepgram" ? "text-foreground" : "text-muted-foreground"}`}>
+                                        Deepgram Nova-3
+                                    </p>
+                                    <p className="text-[10px] text-muted-foreground leading-tight">
+                                        Alta precisão + diarização
+                                    </p>
+                                </div>
+                            </button>
+
+                            <button
+                                type="button"
+                                onClick={() => setEngine("google")}
+                                disabled={isProcessing || isDone}
+                                className={`flex flex-col items-center justify-center gap-1.5 rounded-xl border p-4 text-center transition-all min-h-[90px] ${engine === "google"
+                                    ? "border-[#841b2d] bg-red-50/30"
+                                    : "border-border hover:border-[#841b2d]/30 hover:bg-gray-50"
+                                    }`}
+                            >
+                                <Globe className={`h-5 w-5 ${engine === "google" ? "text-[#841b2d]" : "text-muted-foreground"}`} />
+                                <div className="space-y-0.5">
+                                    <p className={`text-[13px] font-semibold ${engine === "google" ? "text-foreground" : "text-muted-foreground"}`}>
+                                        Google Chirp 3
+                                    </p>
+                                    <p className="text-[10px] text-muted-foreground leading-tight">
+                                        Multilíngue + denoiser
+                                    </p>
+                                </div>
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* File upload */}
+                    <div className="pt-2">
+                        {!selectedFile ? (
+                            <div
+                                className="group cursor-pointer rounded-xl border-2 border-dashed border-gray-300 p-8 sm:p-12 text-center transition-all hover:border-[#841b2d]/40 hover:bg-red-50/10"
+                                onClick={() => fileInputRef.current?.click()}
+                            >
+                                <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-red-50 text-[#841b2d] transition-colors group-hover:bg-red-100">
+                                    <Upload className="h-5 w-5" />
+                                </div>
+                                <p className="font-semibold text-foreground text-sm">
+                                    Arraste e solte seu arquivo aqui
+                                </p>
+                                <p className="text-sm text-muted-foreground">
+                                    ou clique para selecionar
+                                </p>
+                                <p className="mt-2 text-[11px] text-muted-foreground">
+                                    Vídeo (MP4, MKV, AVI, MOV) ou Áudio (MP3, WAV, M4A) — máx. 1 GB
+                                </p>
+                            </div>
+                        ) : (
+                            <div className="flex items-center gap-3 rounded-xl border border-gray-200 bg-gray-50 p-4">
+                                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-red-50 text-[#841b2d]">
+                                    {isAudioFile(selectedFile.name) ? (
+                                        <Music className="h-5 w-5" />
+                                    ) : (
+                                        <FileVideo className="h-5 w-5" />
                                     )}
                                 </div>
-                            )}
+                                <div className="min-w-0 flex-1">
+                                    <p className="truncate font-medium text-foreground text-sm">{selectedFile.name}</p>
+                                    <p className="text-xs text-muted-foreground">{formatBytes(selectedFile.size)}</p>
+                                </div>
+                                {!isProcessing && !isDone && (
+                                    <Button variant="ghost" size="sm" onClick={clearFile} className="text-muted-foreground hover:text-foreground">
+                                        <X className="h-4 w-4" />
+                                    </Button>
+                                )}
+                            </div>
+                        )}
 
-                            <input
-                                ref={fileInputRef}
-                                type="file"
-                                accept={ACCEPTED_ALL}
-                                className="hidden"
-                                onChange={handleFileSelect}
-                                disabled={isProcessing || isDone}
-                            />
-                        </div>
+                        <input
+                            ref={fileInputRef}
+                            type="file"
+                            accept={ACCEPTED_ALL}
+                            className="hidden"
+                            onChange={handleFileSelect}
+                            disabled={isProcessing || isDone}
+                        />
+                    </div>
 
-                        {/* Submit */}
+                    {/* Bottom Actions */}
+                    <div className="flex gap-4 pt-4 border-t mt-4">
                         <Button
-                            onClick={handleSubmit}
-                            disabled={!title.trim() || !selectedFile || isProcessing || isDone}
-                            className="w-full gradient-primary font-semibold text-white shadow-md hover:shadow-lg"
-                            size="lg"
+                            variant="outline"
+                            className="flex-1 py-6 h-12 font-medium bg-white text-foreground"
+                            onClick={() => router.push("/dashboard")}
+                            disabled={isProcessing || isDone}
                         >
-                            {isProcessing ? (
-                                <>
-                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                    Processando...
-                                </>
-                            ) : isDone ? (
-                                <>
-                                    <CheckCircle2 className="mr-2 h-4 w-4" />
-                                    Enviado com sucesso!
-                                </>
-                            ) : (
-                                <>
-                                    <Upload className="mr-2 h-4 w-4" />
-                                    Iniciar Upload
-                                </>
-                            )}
+                            Voltar
                         </Button>
-
-                        {isError && (
+                        {!isError ? (
+                            <Button
+                                onClick={handleSubmit}
+                                disabled={!title.trim() || !selectedFile || isProcessing || isDone}
+                                className="flex-1 py-6 h-12 font-semibold bg-[#841b2d] hover:bg-[#6b1624] text-white shadow-sm"
+                            >
+                                {isProcessing ? (
+                                    <>
+                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                        Processando...
+                                    </>
+                                ) : isDone ? (
+                                    <>
+                                        <CheckCircle2 className="mr-2 h-4 w-4" />
+                                        Começar
+                                    </>
+                                ) : (
+                                    "Avançar"
+                                )}
+                            </Button>
+                        ) : (
                             <Button
                                 variant="outline"
-                                className="w-full"
+                                className="flex-1 py-6 h-12 font-semibold border-red-200 text-red-600 hover:bg-red-50"
                                 onClick={() => {
                                     setIsError(false);
                                     setIsProcessing(false);
@@ -525,9 +525,9 @@ export default function NewTranscriptionPage() {
                                 Tentar novamente
                             </Button>
                         )}
-                    </CardContent>
-                </Card>
-            </div>
+                    </div>
+                </CardContent>
+            </Card>
         </div>
     );
 }

@@ -78,6 +78,7 @@ export function useTimeSync({ utterances }: UseTimeSyncOptions): UseTimeSyncRetu
 
         // If already playing on mount, start RAF loop
         if (!media.paused) {
+            // eslint-disable-next-line react-hooks/set-state-in-effect
             setIsPlaying(true);
             rafId = requestAnimationFrame(tick);
         }
@@ -98,7 +99,7 @@ export function useTimeSync({ utterances }: UseTimeSyncOptions): UseTimeSyncRetu
             media.removeEventListener("loadedmetadata", handleLoadedMetadata);
             media.removeEventListener("ratechange", handleRateChange);
         };
-    }, [utterances]);
+    }, [utterances, playbackRate]);
 
     // Pula o player para um timestamp específico
     const seekTo = useCallback((time: number) => {

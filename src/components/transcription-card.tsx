@@ -28,40 +28,28 @@ const statusConfig: Record<
     TranscriptionStatus,
     {
         label: string;
-        icon: React.ReactNode;
         className: string;
-        headerGlow?: string;
     }
 > = {
     uploading: {
         label: "Enviando",
-        icon: <Upload className="h-3 w-3" />,
-        className: "bg-yellow-500/15 text-yellow-600 border-yellow-500/30",
-        headerGlow: "shadow-yellow-500/10",
+        className: "bg-yellow-600 text-white",
     },
     transcribing: {
-        label: "Transcrevendo",
-        icon: <Loader2 className="h-3 w-3 animate-spin" />,
-        className: "bg-blue-500/15 text-blue-600 border-blue-500/30",
-        headerGlow: "shadow-blue-500/10",
+        label: "Processando",
+        className: "bg-[#2e7d32] text-white",
     },
     formatting: {
         label: "Formatando",
-        icon: <Loader2 className="h-3 w-3 animate-spin" />,
-        className: "bg-purple-500/15 text-purple-600 border-purple-500/30",
-        headerGlow: "shadow-purple-500/10",
+        className: "bg-[#2e7d32] text-white",
     },
     completed: {
         label: "Concluído",
-        icon: <CheckCircle2 className="h-3 w-3" />,
-        className: "bg-emerald-500/15 text-emerald-600 border-emerald-500/30",
-        headerGlow: "shadow-emerald-500/10",
+        className: "bg-[#841b2d] text-white", // TJMG Maroon
     },
     error: {
         label: "Erro",
-        icon: <AlertCircle className="h-3 w-3" />,
-        className: "bg-red-500/15 text-red-600 border-red-500/30",
-        headerGlow: "shadow-red-500/10",
+        className: "bg-red-600 text-white",
     },
 };
 
@@ -110,106 +98,84 @@ export function TranscriptionCard({ transcription }: { transcription: Transcript
     const EngineIcon = transcription.engine === "deepgram" ? AudioLines : transcription.engine === "google" ? Globe : Mic;
     const segmentCount = transcription.utterance_count ?? 0;
 
+    const formattedDate = new Date(transcription.created_at).toLocaleDateString('pt-BR', {
+        day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit',
+    }).replace(' de ', ' de ').replace(',', ' -');
+
     const card = (
         <div
-            className={`group/card relative flex flex-col overflow-hidden rounded-xl border bg-white shadow-sm transition-all duration-300
+            className={`group/card relative flex flex-col p-5 bg-white rounded-2xl border transition-all duration-300 min-h-[140px] shadow-sm
                 ${isClickable && !confirming
-                    ? "cursor-pointer hover:shadow-lg hover:shadow-primary/8 hover:-translate-y-0.5 hover:border-primary/25"
+                    ? "cursor-pointer hover:border-primary/40"
                     : !confirming ? "opacity-85" : ""
                 }
                 ${deleting ? "pointer-events-none opacity-50" : ""}
-                ${confirming ? "border-red-500/40 !shadow-red-500/10" : "border-border/60"}
+                ${confirming ? "border-red-500/40" : transcription.status === 'completed' ? "border-[#841b2d]/30" : "border-border"}
             `}
         >
-            {/* ─── Gradient Header Bar ─────────────────────────────────── */}
-            <div
-                className={`relative h-20 overflow-hidden ${config.headerGlow} ${isShared ? "gradient-navy" : "gradient-primary"
-                    }`}
-            >
-                {/* Decorative icon */}
-                <div className="absolute -right-3 -top-3 opacity-[0.08]">
-                    <FileText className="h-24 w-24 text-white" />
-                </div>
-                <div className="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-black/10 to-transparent" />
-
-                {/* Status badge - overlaid on header */}
-                <div className="absolute bottom-3 left-3 flex items-center gap-1.5">
-                    <Badge
-                        className={`flex items-center gap-1 border px-2 py-0.5 text-[10px] font-semibold shadow-sm ${config.className} bg-white/90 backdrop-blur-sm`}
-                    >
-                        {config.icon}
-                        {config.label}
-                    </Badge>
-
-                    {/* Shared badge */}
-                    {isShared && (
-                        <Badge className="flex items-center gap-1 border border-blue-500/30 bg-blue-500/15 px-2 py-0.5 text-[10px] font-semibold text-blue-600 shadow-sm backdrop-blur-sm">
-                            <Users className="h-2.5 w-2.5" />
-                            Compartilhado
-                        </Badge>
-                    )}
-                </div>
-            </div>
-
-            {/* ─── Card Body ───────────────────────────────────────────── */}
             {confirming ? (
-                <div className="flex flex-1 flex-col items-center justify-center gap-3 p-5">
+                <div className="flex flex-1 flex-col items-center justify-center gap-3">
                     <p className="text-sm font-medium text-red-500">Apagar esta degravação?</p>
                     <div className="flex gap-2">
-                        <button
-                            onClick={handleConfirm}
-                            className="rounded-lg bg-red-500/15 px-4 py-1.5 text-xs font-semibold text-red-600 transition-colors hover:bg-red-500/25"
-                        >
+                        <button onClick={handleConfirm} className="rounded-lg bg-red-500/15 px-4 py-1.5 text-xs font-semibold text-red-600 transition-colors hover:bg-red-500/25">
                             Confirmar
                         </button>
-                        <button
-                            onClick={handleCancel}
-                            className="rounded-lg bg-muted/60 px-4 py-1.5 text-xs font-semibold text-muted-foreground transition-colors hover:bg-muted"
-                        >
+                        <button onClick={handleCancel} className="rounded-lg bg-muted/60 px-4 py-1.5 text-xs font-semibold text-muted-foreground transition-colors hover:bg-muted">
                             Cancelar
                         </button>
                     </div>
                 </div>
             ) : (
-                <div className="flex flex-1 flex-col gap-3 p-4">
-                    {/* Title */}
-                    <h3 className="line-clamp-2 text-sm font-bold leading-snug text-foreground pr-6">
-                        {transcription.title}
-                    </h3>
-
-                    {/* Shared by info */}
-                    {isShared && transcription.shared_by_email && (
-                        <p className="text-[11px] text-muted-foreground">
-                            Por <span className="font-medium">{transcription.shared_by_email}</span>
-                        </p>
-                    )}
-
-                    {/* Meta info row */}
-                    <div className="flex flex-wrap items-center gap-1.5">
-                        {/* Engine tag */}
-                        <span className="inline-flex items-center gap-1 rounded-md bg-secondary/80 px-1.5 py-0.5 text-[10px] font-medium text-secondary-foreground/80">
-                            <EngineIcon className="h-2.5 w-2.5" />
-                            {engineLabel}
-                        </span>
-
-                        {/* Segment count */}
-                        {segmentCount > 0 && (
-                            <span className="inline-flex items-center gap-1 rounded-md bg-secondary/80 px-1.5 py-0.5 text-[10px] font-medium text-secondary-foreground/80">
-                                <MessageSquareText className="h-2.5 w-2.5" />
-                                {segmentCount} {segmentCount === 1 ? "fala" : "falas"}
+                <>
+                    {/* Top Row: Status Badge and Actions */}
+                    <div className="flex justify-between items-start mb-3">
+                        <div className="flex gap-2">
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${config.className}`}>
+                                {config.label}
                             </span>
-                        )}
+                            {isShared && (
+                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800">
+                                    Compartilhado
+                                </span>
+                            )}
+                        </div>
+                        
+                        <div className="flex opacity-0 group-hover/card:opacity-100 transition-opacity">
+                            {isShared ? null : (
+                                <button
+                                    onClick={handleDeleteClick}
+                                    className="p-1 text-muted-foreground hover:text-red-600 transition-colors"
+                                >
+                                    <Trash2 className="h-4 w-4" />
+                                </button>
+                            )}
+                        </div>
                     </div>
 
-                    {/* Spacer */}
-                    <div className="flex-1" />
-
-                    {/* Footer: timestamp */}
-                    <div className="flex items-center gap-1.5 border-t border-border/40 pt-2.5 text-[11px] text-muted-foreground">
-                        <Clock className="h-3 w-3" />
-                        <span>{formatDistanceToNow(transcription.created_at)}</span>
+                    {/* Meta Data */}
+                    <div className="flex flex-col flex-1">
+                        <h3 className="text-[15px] font-bold text-foreground line-clamp-2 leading-tight mb-2">
+                            {transcription.title}
+                        </h3>
+                        
+                        <div className="space-y-1.5 mt-auto">
+                            <div className="flex items-center gap-2 text-[13px] text-muted-foreground font-medium">
+                                <Clock className="h-4 w-4 text-gray-400" />
+                                {formattedDate}
+                            </div>
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2 text-[13px] text-muted-foreground font-medium">
+                                    <MessageSquareText className="h-4 w-4 text-gray-400" />
+                                    {segmentCount} Falas
+                                </div>
+                                
+                                {isClickable && (
+                                    <FileText className="h-5 w-5 text-gray-400" />
+                                )}
+                            </div>
+                        </div>
                     </div>
-                </div>
+                </>
             )}
         </div>
     );

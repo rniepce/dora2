@@ -88,8 +88,8 @@ export function VideoSummary({ transcriptionId }: VideoSummaryProps) {
             {/* Header */}
             <div className="flex items-center justify-between border-b border-border px-4 py-3">
                 <div className="flex items-center gap-2">
-                    <div className="flex h-7 w-7 items-center justify-center rounded-md gradient-navy">
-                        <FileText className="h-3.5 w-3.5 text-white" />
+                    <div className="flex h-7 w-7 items-center justify-center rounded-md bg-red-50 text-[#841b2d]">
+                        <FileText className="h-3.5 w-3.5" />
                     </div>
                     <h3 className="text-sm font-semibold text-foreground">Resumo</h3>
                 </div>
