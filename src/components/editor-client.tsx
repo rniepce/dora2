@@ -245,7 +245,7 @@ export function EditorClient({ transcription, utterances }: EditorClientProps) {
                                 <Scale className="h-4 w-4 text-white" />
                             </div>
                             <h1 className="text-sm font-bold text-foreground">
-                                Transcrito TJMG
+                                Transcritor TJMG
                             </h1>
                         </div>
                     </div>

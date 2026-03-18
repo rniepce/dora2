@@ -40,10 +40,14 @@ export function useTimeSync({ utterances }: UseTimeSyncOptions): UseTimeSyncRetu
             const t = media.currentTime;
             setCurrentTime(t);
 
-            // Encontrar a utterance ativa pelo timestamp
-            const active = utterances.find(
-                (u) => t >= u.start_time && t <= u.end_time
-            );
+            // Encontrar a utterance ativa pelo timestamp (find last utterance where start_time <= t)
+            let active = null;
+            for (let i = utterances.length - 1; i >= 0; i--) {
+                if (t >= utterances[i].start_time) {
+                    active = utterances[i];
+                    break;
+                }
+            }
             setActiveUtteranceId(active?.id ?? null);
 
             rafId = requestAnimationFrame(tick);
@@ -64,9 +68,13 @@ export function useTimeSync({ utterances }: UseTimeSyncOptions): UseTimeSyncRetu
             // Update immediately on seek even if paused
             const t = media.currentTime;
             setCurrentTime(t);
-            const active = utterances.find(
-                (u) => t >= u.start_time && t <= u.end_time
-            );
+            let active = null;
+            for (let i = utterances.length - 1; i >= 0; i--) {
+                if (t >= utterances[i].start_time) {
+                    active = utterances[i];
+                    break;
+                }
+            }
             setActiveUtteranceId(active?.id ?? null);
         };
         const handleDurationChange = () => setDuration(media.duration || 0);
