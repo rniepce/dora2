@@ -62,10 +62,27 @@ function HighlightedWords({
         }
     }, [isActiveUtterance, currentTime]);
 
+    // Encontrar o índice da palavra atualmente ativa (última palavra cujo start <= currentTime)
+    let activeWordIndex = -1;
+    if (isActiveUtterance) {
+        for (let j = words.length - 1; j >= 0; j--) {
+            if (currentTime >= words[j].start) {
+                // Remove the highlight fairly quickly if the utterance ended long ago,
+                // but for normal gaps, keep it highlighted.
+                if (currentTime > words[j].end + 2) {
+                    activeWordIndex = -1;
+                } else {
+                    activeWordIndex = j;
+                }
+                break;
+            }
+        }
+    }
+
     return (
         <>
             {words.map((w, i) => {
-                const isActive = isActiveUtterance && currentTime >= w.start && currentTime <= w.end;
+                const isActive = i === activeWordIndex;
                 return (
                     <span
                         key={`${w.start}-${i}`}
