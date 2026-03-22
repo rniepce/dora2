@@ -64,20 +64,36 @@ export async function runFormatting(
         const systemPrompt = buildSystemPrompt(glossary);
         const userPrompt = JSON.stringify(batch, null, 2);
 
-        const llmRes = await fetch(chatUrl, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "api-key": apiKey,
-            },
-            body: JSON.stringify({
-                messages: [
-                    { role: "system", content: systemPrompt },
-                    { role: "user", content: userPrompt },
-                ],
-                max_completion_tokens: 8000,
-            }),
-        });
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 120000); // 2 min por batch
+
+        let llmRes: Response;
+        try {
+            llmRes = await fetch(chatUrl, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "api-key": apiKey,
+                },
+                body: JSON.stringify({
+                    messages: [
+                        { role: "system", content: systemPrompt },
+                        { role: "user", content: userPrompt },
+                    ],
+                    max_completion_tokens: 8000,
+                }),
+                signal: controller.signal,
+            });
+            clearTimeout(timeoutId);
+        } catch (batchErr) {
+            clearTimeout(timeoutId);
+            if (batchErr instanceof Error && batchErr.name === "AbortError") {
+                console.error("[Format] LLM batch timeout");
+            } else {
+                console.error("[Format] LLM batch error:", batchErr);
+            }
+            continue;
+        }
 
         if (!llmRes.ok) {
             const errText = await llmRes.text();
@@ -112,7 +128,7 @@ export async function runFormatting(
     await updateProgress(100, "completed");
 }
 
-function buildSystemPrompt(glossary: string): string {
+export function buildSystemPrompt(glossary: string): string {
     return `Você é um assistente especializado em degravação de audiências judiciais brasileiras do TJMG.
 
 ## Sua Tarefa Principal
@@ -184,30 +200,34 @@ Retorne APENAS um array JSON válido:
 IMPORTANTE: Retorne APENAS o JSON, sem markdown, sem explicações, sem texto antes ou depois.`;
 }
 
-function parseLLMResponse(
+export function parseLLMResponse(
     response: string
 ): Array<{ id: string; speaker_label: string; text: string }> | null {
+    // Tentativa 1: JSON direto
     try {
         const parsed = JSON.parse(response);
         if (Array.isArray(parsed)) return parsed;
+    } catch { /* não é JSON direto — tenta outros formatos */ }
 
-        const jsonMatch = response.match(/```(?:json)?\s*([\s\S]*?)```/);
-        if (jsonMatch?.[1]) {
+    // Tentativa 2: JSON dentro de markdown code block
+    const jsonMatch = response.match(/```(?:json)?\s*([\s\S]*?)```/);
+    if (jsonMatch?.[1]) {
+        try {
             const inner = JSON.parse(jsonMatch[1].trim());
             if (Array.isArray(inner)) return inner;
-        }
+        } catch { /* continua */ }
+    }
 
-        const arrayMatch = response.match(/\[[\s\S]*\]/);
-        if (arrayMatch) {
+    // Tentativa 3: encontrar array no texto
+    const arrayMatch = response.match(/\[[\s\S]*\]/);
+    if (arrayMatch) {
+        try {
             const arr = JSON.parse(arrayMatch[0]);
             if (Array.isArray(arr)) return arr;
-        }
-
-        console.error("[Format] Could not parse LLM response");
-        return null;
-    } catch (err) {
-        console.error("[Format] Parse error:", err);
-        console.error("[Format] Raw:", response.substring(0, 500));
-        return null;
+        } catch { /* continua */ }
     }
+
+    console.error("[Format] Could not parse LLM response");
+    console.error("[Format] Raw:", response.substring(0, 500));
+    return null;
 }

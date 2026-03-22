@@ -9,6 +9,8 @@ import { createServerClient } from "@/lib/supabase-server";
  * Retorna streaming de texto via ReadableStream.
  */
 export async function POST(request: Request) {
+    const requestId = crypto.randomUUID();
+
     try {
         const { messages, transcriptionId } = await request.json();
 
@@ -26,6 +28,8 @@ export async function POST(request: Request) {
         if (!user) {
             return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
         }
+
+        console.log(`[Chat] [${requestId}] transcriptionId=${transcriptionId} user=${user.id}`);
 
         // Buscar utterances para contexto
         const { data: utterances } = await supabase
@@ -56,25 +60,41 @@ ${transcriptText}
 - Cite trechos relevantes quando apropriado
 - Seja objetivo e direto`;
 
-        const llmRes = await fetch(chatUrl, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "api-key": apiKey,
-            },
-            body: JSON.stringify({
-                messages: [
-                    { role: "system", content: systemPrompt },
-                    ...messages,
-                ],
-                max_completion_tokens: 4000,
-                stream: true,
-            }),
-        });
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 180000); // 3 min timeout
+
+        let llmRes: Response;
+        try {
+            llmRes = await fetch(chatUrl, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "api-key": apiKey,
+                },
+                body: JSON.stringify({
+                    messages: [
+                        { role: "system", content: systemPrompt },
+                        ...messages,
+                    ],
+                    max_completion_tokens: 4000,
+                    stream: true,
+                }),
+                signal: controller.signal,
+            });
+        } catch (fetchErr) {
+            clearTimeout(timeoutId);
+            if (fetchErr instanceof Error && fetchErr.name === "AbortError") {
+                console.error(`[Chat] [${requestId}] LLM timeout`);
+                return NextResponse.json({ error: "Timeout ao gerar resposta" }, { status: 504 });
+            }
+            throw fetchErr;
+        }
+
+        clearTimeout(timeoutId);
 
         if (!llmRes.ok) {
             const errText = await llmRes.text();
-            console.error("Chat LLM error:", errText);
+            console.error(`[Chat] [${requestId}] LLM error:`, errText);
             return NextResponse.json({ error: "Erro ao gerar resposta" }, { status: 500 });
         }
 
@@ -118,7 +138,7 @@ ${transcriptText}
                         }
                     }
                 } catch (err) {
-                    console.error("Stream error:", err);
+                    console.error(`[Chat] [${requestId}] Stream error:`, err);
                 } finally {
                     controller.close();
                 }
@@ -133,7 +153,7 @@ ${transcriptText}
             },
         });
     } catch (err) {
-        console.error("Chat route error:", err);
+        console.error(`[Chat] [${requestId}] Error:`, err);
         return NextResponse.json(
             { error: err instanceof Error ? err.message : "Erro interno" },
             { status: 500 }

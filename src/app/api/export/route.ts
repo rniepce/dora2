@@ -12,23 +12,10 @@ import {
     PageNumber,
 } from "docx";
 import type { Utterance } from "@/lib/types";
-
-// Cores por tipo de locutor (hex para docx)
-const SPEAKER_COLORS: Record<string, string> = {
-    "JUIZ(A)": "B45309",
-    "ADV. AUTOR": "1D4ED8",
-    "ADV. RÉU": "BE123C",
-    "PROMOTOR(A)": "1D4ED8",
-    "DEFENSOR(A)": "BE123C",
-    "TESTEMUNHA": "7C3AED",
-    "DEPOENTE": "7C3AED",
-    "RÉU": "EA580C",
-    "AUTOR": "0891B2",
-    "ESCRIVÃO(Ã)": "4B5563",
-};
+import { getSpeakerColorHex } from "@/lib/speaker-colors";
 
 function getSpeakerColor(label: string): string {
-    return SPEAKER_COLORS[label] ?? "991B1B";
+    return getSpeakerColorHex(label);
 }
 
 function formatTimestamp(seconds: number): string {

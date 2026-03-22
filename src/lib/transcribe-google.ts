@@ -1,11 +1,13 @@
-import { writeFile, unlink, readFile } from "fs/promises";
+import { writeFile, unlink, readFile, open, stat } from "fs/promises";
+import { createWriteStream } from "fs";
+import { pipeline } from "stream/promises";
+import { Readable } from "stream";
 import { execSync } from "child_process";
 import { tmpdir } from "os";
 import { join } from "path";
 import { randomUUID } from "crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-const VIDEO_EXTENSIONS = new Set(["mp4", "mkv", "avi", "mov", "webm", "flv", "wmv"]);
 const CHUNK_DURATION_SEC = 480; // 8 min — margem segura para Recognize (~10 min max)
 const REGION = "us";
 
@@ -43,6 +45,25 @@ function parseDuration(d?: string): number {
     return parseFloat(d.replace("s", ""));
 }
 
+/** Verifica magic bytes para garantir que o arquivo é realmente áudio/vídeo. */
+function isValidAudioVideo(buf: Buffer): boolean {
+    if (buf.length < 12) return false;
+    if ((buf[0] === 0x49 && buf[1] === 0x44 && buf[2] === 0x33) ||
+        (buf[0] === 0xFF && (buf[1] & 0xE0) === 0xE0)) return true;
+    if (buf[0] === 0x52 && buf[1] === 0x49 && buf[2] === 0x46 && buf[3] === 0x46 &&
+        buf[8] === 0x57 && buf[9] === 0x41 && buf[10] === 0x56 && buf[11] === 0x45) return true;
+    if (buf[0] === 0x4F && buf[1] === 0x67 && buf[2] === 0x67 && buf[3] === 0x53) return true;
+    if (buf[0] === 0x66 && buf[1] === 0x4C && buf[2] === 0x61 && buf[3] === 0x43) return true;
+    if (buf.length >= 8 &&
+        buf[4] === 0x66 && buf[5] === 0x74 && buf[6] === 0x79 && buf[7] === 0x70) return true;
+    if (buf[0] === 0x1A && buf[1] === 0x45 && buf[2] === 0xDF && buf[3] === 0xA3) return true;
+    if (buf[0] === 0x52 && buf[1] === 0x49 && buf[2] === 0x46 && buf[3] === 0x46 &&
+        buf[8] === 0x41 && buf[9] === 0x56 && buf[10] === 0x49 && buf[11] === 0x20) return true;
+    if (buf[0] === 0x46 && buf[1] === 0x4C && buf[2] === 0x56) return true;
+    if (buf[0] === 0x30 && buf[1] === 0x26 && buf[2] === 0xB2 && buf[3] === 0x75) return true;
+    return false;
+}
+
 // ─── Função principal ────────────────────────────────────────────────────────
 
 export async function runGoogleTranscription(
@@ -67,30 +88,47 @@ export async function runGoogleTranscription(
 
     await updateProgress(15, "transcribing");
 
-    // 2. Baixar arquivo
+    // 2. Baixar arquivo como stream para /tmp
     await updateProgress(20);
-    console.log("[Google] Downloading media from:", transcription.media_url);
-    const mediaResponse = await fetch(transcription.media_url);
-    if (!mediaResponse.ok) throw new Error("Não foi possível baixar o arquivo do Storage");
-    const mediaBuffer = Buffer.from(await mediaResponse.arrayBuffer());
-    console.log(`[Google] Downloaded: ${(mediaBuffer.length / 1024 / 1024).toFixed(1)}MB`);
-
-    // 3. Converter para WAV mono 16kHz (formato ideal para Chirp 3)
     const urlPath = new URL(transcription.media_url).pathname;
     const ext = urlPath.split(".").pop()?.toLowerCase() ?? "";
-    const isVideo = VIDEO_EXTENSIONS.has(ext);
     const tmpId = randomUUID();
+    const inputPath = join(tmpdir(), `gc-input-${tmpId}.${ext || "bin"}`);
+    const outputPath = join(tmpdir(), `gc-output-${tmpId}.wav`);
 
+    console.log("[Google] Streaming media to disk...");
+    const mediaResponse = await fetch(transcription.media_url);
+    if (!mediaResponse.ok) throw new Error("Não foi possível baixar o arquivo do Storage");
+    if (!mediaResponse.body) throw new Error("Resposta sem body");
+
+    await pipeline(
+        Readable.fromWeb(mediaResponse.body as Parameters<typeof Readable.fromWeb>[0]),
+        createWriteStream(inputPath)
+    );
+
+    const { size: downloadSize } = await stat(inputPath);
+    console.log(`[Google] Saved: ${(downloadSize / 1024 / 1024).toFixed(1)}MB`);
+
+    // 2a. Verificar magic bytes
+    const headerFh = await open(inputPath, "r");
+    const headerBuf = Buffer.alloc(12);
+    try {
+        await headerFh.read(headerBuf, 0, 12, 0);
+    } finally {
+        await headerFh.close();
+    }
+    if (!isValidAudioVideo(headerBuf)) {
+        await unlink(inputPath).catch((e) => console.error("[Google] unlink error:", e));
+        throw new Error("Arquivo inválido: formato de áudio/vídeo não reconhecido");
+    }
+
+    // 3. Converter para WAV mono 16kHz (formato ideal para Chirp 3)
     await updateProgress(25);
     console.log("[Google] Converting to WAV (mono 16kHz)...");
-
-    const inputPath = join(tmpdir(), `gc-input-${tmpId}.${ext || "mp4"}`);
-    const outputPath = join(tmpdir(), `gc-output-${tmpId}.wav`);
 
     let audioBuffer: Buffer;
 
     try {
-        await writeFile(inputPath, mediaBuffer);
         execSync(
             `ffmpeg -i "${inputPath}" -vn -acodec pcm_s16le -ar 16000 -ac 1 -y "${outputPath}"`,
             { timeout: 600000, stdio: "pipe" }
@@ -98,14 +136,14 @@ export async function runGoogleTranscription(
         audioBuffer = await readFile(outputPath);
         console.log(`[Google] Converted: ${(audioBuffer.length / 1024 / 1024).toFixed(1)}MB WAV`);
     } finally {
-        await unlink(inputPath).catch(() => { });
-        await unlink(outputPath).catch(() => { });
+        await unlink(inputPath).catch((e) => console.error("[Google] unlink error:", e));
+        await unlink(outputPath).catch((e) => console.error("[Google] unlink error:", e));
     }
 
     // 4. Transcrever (com chunking se necessário)
     await updateProgress(30);
 
-    // Durar em segundos (WAV PCM 16kHz mono 16-bit = 32000 bytes/seg)
+    // Duração estimada em segundos (WAV PCM 16kHz mono 16-bit = 32000 bytes/seg)
     const estimatedDurationSec = audioBuffer.length / 32000;
     console.log(`[Google] Estimated duration: ${estimatedDurationSec.toFixed(0)}s`);
 
@@ -151,11 +189,11 @@ export async function runGoogleTranscription(
                     const chunkProgress = 35 + Math.round(((i + 1) / numChunks) * 20);
                     await updateProgress(chunkProgress);
                 } finally {
-                    await unlink(chunkPath).catch(() => { });
+                    await unlink(chunkPath).catch((e) => console.error("[Google] unlink error:", e));
                 }
             }
         } finally {
-            await unlink(chunkInputPath).catch(() => { });
+            await unlink(chunkInputPath).catch((e) => console.error("[Google] unlink error:", e));
         }
     } else {
         await updateProgress(35);
