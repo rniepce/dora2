@@ -1,4 +1,7 @@
-import { writeFile, unlink, readFile } from "fs/promises";
+import { writeFile, unlink, readFile, open, stat } from "fs/promises";
+import { createWriteStream } from "fs";
+import { pipeline } from "stream/promises";
+import { Readable } from "stream";
 import { execSync } from "child_process";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -8,6 +11,34 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 const VIDEO_EXTENSIONS = new Set(["mp4", "mkv", "avi", "mov", "webm", "flv", "wmv"]);
 const MAX_WHISPER_SIZE = 24 * 1024 * 1024;
 const CHUNK_DURATION_SEC = 600;
+
+/** Verifica magic bytes para garantir que o arquivo é realmente áudio/vídeo. */
+function isValidAudioVideo(buf: Buffer): boolean {
+    if (buf.length < 12) return false;
+    // MP3: ID3 tag ou MPEG sync
+    if ((buf[0] === 0x49 && buf[1] === 0x44 && buf[2] === 0x33) ||
+        (buf[0] === 0xFF && (buf[1] & 0xE0) === 0xE0)) return true;
+    // WAV: RIFF + WAVE
+    if (buf[0] === 0x52 && buf[1] === 0x49 && buf[2] === 0x46 && buf[3] === 0x46 &&
+        buf[8] === 0x57 && buf[9] === 0x41 && buf[10] === 0x56 && buf[11] === 0x45) return true;
+    // OGG
+    if (buf[0] === 0x4F && buf[1] === 0x67 && buf[2] === 0x67 && buf[3] === 0x53) return true;
+    // FLAC
+    if (buf[0] === 0x66 && buf[1] === 0x4C && buf[2] === 0x61 && buf[3] === 0x43) return true;
+    // MP4/M4A/MOV: ftyp box em offset 4
+    if (buf.length >= 8 &&
+        buf[4] === 0x66 && buf[5] === 0x74 && buf[6] === 0x79 && buf[7] === 0x70) return true;
+    // MKV/WebM: EBML header
+    if (buf[0] === 0x1A && buf[1] === 0x45 && buf[2] === 0xDF && buf[3] === 0xA3) return true;
+    // AVI: RIFF + AVI
+    if (buf[0] === 0x52 && buf[1] === 0x49 && buf[2] === 0x46 && buf[3] === 0x46 &&
+        buf[8] === 0x41 && buf[9] === 0x56 && buf[10] === 0x49 && buf[11] === 0x20) return true;
+    // FLV
+    if (buf[0] === 0x46 && buf[1] === 0x4C && buf[2] === 0x56) return true;
+    // WMV/WMA: ASF header
+    if (buf[0] === 0x30 && buf[1] === 0x26 && buf[2] === 0xB2 && buf[3] === 0x75) return true;
+    return false;
+}
 
 export async function runWhisperTranscription(
     transcriptionId: string,
@@ -31,46 +62,68 @@ export async function runWhisperTranscription(
 
     await updateProgress(15, "transcribing");
 
-    // 2. Baixar arquivo
+    // 2. Baixar arquivo como stream para /tmp
     await updateProgress(20);
-    console.log("[Whisper] Downloading media from:", transcription.media_url);
-    const mediaResponse = await fetch(transcription.media_url);
-    if (!mediaResponse.ok) throw new Error("Não foi possível baixar o arquivo do Storage");
-    const mediaBuffer = Buffer.from(await mediaResponse.arrayBuffer());
-    console.log(`[Whisper] Downloaded: ${(mediaBuffer.length / 1024 / 1024).toFixed(1)}MB`);
-
-    // 3. Converter para MP3
     const urlPath = new URL(transcription.media_url).pathname;
     const ext = urlPath.split(".").pop()?.toLowerCase() ?? "";
     const isVideo = VIDEO_EXTENSIONS.has(ext);
-    const needsConversion = isVideo || mediaBuffer.length > MAX_WHISPER_SIZE;
+    const tmpId = randomUUID();
+    const inputPath = join(tmpdir(), `input-${tmpId}.${ext || "bin"}`);
+
+    console.log("[Whisper] Streaming media to disk...");
+    const mediaResponse = await fetch(transcription.media_url);
+    if (!mediaResponse.ok) throw new Error("Não foi possível baixar o arquivo do Storage");
+    if (!mediaResponse.body) throw new Error("Resposta sem body");
+
+    await pipeline(
+        Readable.fromWeb(mediaResponse.body as Parameters<typeof Readable.fromWeb>[0]),
+        createWriteStream(inputPath)
+    );
+
+    const { size: fileSize } = await stat(inputPath);
+    console.log(`[Whisper] Saved: ${(fileSize / 1024 / 1024).toFixed(1)}MB`);
+
+    // 2a. Verificar magic bytes
+    const headerFh = await open(inputPath, "r");
+    const headerBuf = Buffer.alloc(12);
+    try {
+        await headerFh.read(headerBuf, 0, 12, 0);
+    } finally {
+        await headerFh.close();
+    }
+    if (!isValidAudioVideo(headerBuf)) {
+        await unlink(inputPath).catch((e) => console.error("[Whisper] unlink error:", e));
+        throw new Error("Arquivo inválido: formato de áudio/vídeo não reconhecido");
+    }
+
+    // 3. Converter para MP3
+    const needsConversion = isVideo || fileSize > MAX_WHISPER_SIZE;
 
     let audioBuffer: Buffer;
     let audioFilename: string;
-    const tmpId = randomUUID();
 
-    if (needsConversion) {
-        await updateProgress(25);
-        console.log("[Whisper] Converting to MP3 (128kbps/22kHz)...");
-        const inputPath = join(tmpdir(), `input-${tmpId}.${ext || "mp4"}`);
-        const outputPath = join(tmpdir(), `output-${tmpId}.mp3`);
-
-        try {
-            await writeFile(inputPath, mediaBuffer);
-            execSync(
-                `ffmpeg -i "${inputPath}" -vn -acodec libmp3lame -ab 128k -ar 22050 -ac 1 -y "${outputPath}"`,
-                { timeout: 300000, stdio: "pipe" }
-            );
-            audioBuffer = await readFile(outputPath);
-            audioFilename = "audio.mp3";
-            console.log(`[Whisper] Converted: ${(audioBuffer.length / 1024 / 1024).toFixed(1)}MB`);
-        } finally {
-            await unlink(inputPath).catch(() => { });
-            await unlink(outputPath).catch(() => { });
+    try {
+        if (needsConversion) {
+            await updateProgress(25);
+            console.log("[Whisper] Converting to MP3 (128kbps/22kHz)...");
+            const outputPath = join(tmpdir(), `output-${tmpId}.mp3`);
+            try {
+                execSync(
+                    `ffmpeg -i "${inputPath}" -vn -acodec libmp3lame -ab 128k -ar 22050 -ac 1 -y "${outputPath}"`,
+                    { timeout: 300000, stdio: "pipe" }
+                );
+                audioBuffer = await readFile(outputPath);
+                audioFilename = "audio.mp3";
+                console.log(`[Whisper] Converted: ${(audioBuffer.length / 1024 / 1024).toFixed(1)}MB`);
+            } finally {
+                await unlink(outputPath).catch((e) => console.error("[Whisper] unlink error:", e));
+            }
+        } else {
+            audioBuffer = await readFile(inputPath);
+            audioFilename = `audio.${ext || "mp3"}`;
         }
-    } else {
-        audioBuffer = mediaBuffer;
-        audioFilename = `audio.${ext || "mp3"}`;
+    } finally {
+        await unlink(inputPath).catch((e) => console.error("[Whisper] unlink error:", e));
     }
 
     // 4. Chunking se necessário
@@ -114,11 +167,11 @@ export async function runWhisperTranscription(
                     const chunkProgress = 35 + Math.round(((i + 1) / numChunks) * 20);
                     await updateProgress(chunkProgress);
                 } finally {
-                    await unlink(chunkPath).catch(() => { });
+                    await unlink(chunkPath).catch((e) => console.error("[Whisper] unlink error:", e));
                 }
             }
         } finally {
-            await unlink(chunkInputPath).catch(() => { });
+            await unlink(chunkInputPath).catch((e) => console.error("[Whisper] unlink error:", e));
         }
     } else {
         await updateProgress(35);

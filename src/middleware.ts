@@ -1,7 +1,54 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 
+// ─── Rate limiting in-memory (funciona em Railway/Node.js persistente) ────────
+// Nota: em deploys serverless/Edge, o Map não persiste entre invocações.
+const rateLimitMap = new Map<string, number[]>();
+const RATE_LIMIT_WINDOW_MS = 60 * 1000; // janela de 1 minuto
+const RATE_LIMIT_MAX_REQUESTS = 60;     // máx. 60 req/min por IP em rotas /api
+
+function isRateLimited(ip: string): boolean {
+    const now = Date.now();
+    const timestamps = rateLimitMap.get(ip) ?? [];
+    // Remove timestamps fora da janela (sliding window)
+    const recent = timestamps.filter((t) => now - t < RATE_LIMIT_WINDOW_MS);
+    recent.push(now);
+    rateLimitMap.set(ip, recent);
+    return recent.length > RATE_LIMIT_MAX_REQUESTS;
+}
+
+// Limpeza periódica para evitar crescimento indefinido do Map
+setInterval(() => {
+    const now = Date.now();
+    for (const [ip, timestamps] of rateLimitMap.entries()) {
+        const recent = timestamps.filter((t) => now - t < RATE_LIMIT_WINDOW_MS);
+        if (recent.length === 0) {
+            rateLimitMap.delete(ip);
+        } else {
+            rateLimitMap.set(ip, recent);
+        }
+    }
+}, RATE_LIMIT_WINDOW_MS);
+
 export async function middleware(request: NextRequest) {
+    // ── Rate limiting para rotas /api ────────────────────────────────────────
+    if (request.nextUrl.pathname.startsWith("/api/")) {
+        const ip =
+            request.headers.get("x-forwarded-for")?.split(",")[0].trim() ??
+            request.headers.get("x-real-ip") ??
+            "unknown";
+
+        if (isRateLimited(ip)) {
+            return new NextResponse(
+                JSON.stringify({ error: "Muitas requisições. Tente novamente em breve." }),
+                {
+                    status: 429,
+                    headers: { "Content-Type": "application/json" },
+                }
+            );
+        }
+    }
+
     let supabaseResponse = NextResponse.next({ request });
 
     const supabase = createServerClient(
@@ -54,5 +101,6 @@ export async function middleware(request: NextRequest) {
 export const config = {
     matcher: [
         "/((?!_next/static|_next/image|favicon.ico|api/|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+        "/api/:path*",
     ],
 };

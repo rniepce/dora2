@@ -19,6 +19,8 @@ export const maxDuration = 300;
  * Chamadas diretas (sem fetch interno) para compatibilidade com Railway.
  */
 export async function POST(request: Request) {
+    const requestId = crypto.randomUUID();
+
     try {
         const { transcriptionId, engine = "whisper" } = await request.json();
 
@@ -34,7 +36,7 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
         }
 
-        console.log(`[Process] Starting pipeline for ${transcriptionId} (user: ${user.id}) with engine: ${engine}`);
+        console.log(`[Process] [${requestId}] Starting pipeline for ${transcriptionId} (user: ${user.id}) with engine: ${engine}`);
 
         // 1. Transcrição
         try {

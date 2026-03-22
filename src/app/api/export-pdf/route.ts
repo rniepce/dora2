@@ -2,23 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase-server";
 import { jsPDF } from "jspdf";
 import type { Utterance } from "@/lib/types";
-
-// Cores por tipo de locutor (RGB)
-const SPEAKER_COLORS: Record<string, [number, number, number]> = {
-    "JUIZ(A)": [180, 83, 9],
-    "ADV. AUTOR": [29, 78, 216],
-    "ADV. RÉU": [190, 18, 60],
-    "PROMOTOR(A)": [29, 78, 216],
-    "DEFENSOR(A)": [190, 18, 60],
-    "TESTEMUNHA": [124, 58, 237],
-    "DEPOENTE": [124, 58, 237],
-    "RÉU": [234, 88, 12],
-    "AUTOR": [8, 145, 178],
-    "ESCRIVÃO(Ã)": [75, 85, 99],
-};
+import { getSpeakerColorRgb } from "@/lib/speaker-colors";
 
 function getSpeakerColor(label: string): [number, number, number] {
-    return SPEAKER_COLORS[label] ?? [153, 27, 27];
+    return getSpeakerColorRgb(label);
 }
 
 function formatTimestamp(seconds: number): string {

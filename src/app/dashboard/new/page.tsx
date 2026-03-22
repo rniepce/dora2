@@ -106,7 +106,9 @@ export default function NewTranscriptionPage() {
             } catch { /* ignore polling errors */ }
         };
 
-        pollingRef.current = setInterval(poll, 2000);
+        // Intervalo base 2s + jitter aleatório 0-500ms para evitar thundering herd
+        const jitter = Math.random() * 500;
+        pollingRef.current = setInterval(poll, 2000 + jitter);
         poll(); // primeira chamada imediata
 
         return () => {
