@@ -100,7 +100,7 @@ export async function deleteTranscriptionAction(id: string) {
         .eq("user_id", user.id)
         .single();
 
-    // Deletar utterances primeiro (FK constraint)
+    // Deletar utterances primeiro (FK constraint) — deve ser feito antes da transcription
     const { error: uttError } = await supabase
         .from("utterances")
         .delete()
@@ -108,7 +108,7 @@ export async function deleteTranscriptionAction(id: string) {
 
     if (uttError) {
         console.error("Error deleting utterances:", uttError);
-        // Continuar mesmo se falhar — pode não ter utterances
+        return { error: "Erro ao apagar falas da degravação." };
     }
 
     // Deletar a transcrição

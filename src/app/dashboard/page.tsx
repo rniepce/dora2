@@ -35,26 +35,19 @@ export default async function DashboardPage() {
         console.error("Error fetching transcriptions:", error);
     }
 
-    // ─── Buscar degravações compartilhadas comigo ─────────────────────────
+    // ─── Buscar degravações compartilhadas comigo (join em uma única query) ─
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: sharedRecords } = await supabase
         .from("shared_transcriptions")
-        .select("transcription_id, shared_by, created_at")
+        .select("transcription_id, shared_by, created_at, transcriptions(*, utterances(count))")
         .eq("shared_with", user!.id)
         .order("created_at", { ascending: false });
 
     let sharedTranscriptions: Transcription[] = [];
 
     if (sharedRecords && sharedRecords.length > 0) {
-        const sharedIds = sharedRecords.map((s) => s.transcription_id);
-
-        const { data: rawShared } = await supabase
-            .from("transcriptions")
-            .select("*, utterances(count)")
-            .in("id", sharedIds)
-            .order("created_at", { ascending: false });
-
-        // Buscar emails dos donos
-        const ownerIds = sharedRecords.map((s) => s.shared_by);
+        // Buscar emails dos donos (bulk — única query)
+        const ownerIds = [...new Set(sharedRecords.map((s) => s.shared_by))];
         const { data: ownerEmails } = await supabase
             .rpc("get_user_emails_by_ids", { user_ids: ownerIds });
 
@@ -65,28 +58,24 @@ export default async function DashboardPage() {
             }
         }
 
-        // Mapear shared_by para email
-        const sharedByMap: Record<string, string> = {};
-        for (const s of sharedRecords) {
-            sharedByMap[s.transcription_id] = emailMap[s.shared_by] ?? "Desconhecido";
-        }
-
-        sharedTranscriptions = (rawShared ?? []).map((t) => {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const raw = t as any;
-            const countArr = raw.utterances;
-            const utterance_count =
-                Array.isArray(countArr) && countArr.length > 0
-                    ? countArr[0].count ?? 0
-                    : 0;
-            const { utterances: _u, ...rest } = raw;
-            return {
-                ...rest,
-                utterance_count,
-                is_shared: true,
-                shared_by_email: sharedByMap[rest.id] ?? "Desconhecido",
-            } as Transcription;
-        });
+        sharedTranscriptions = sharedRecords
+            .filter((s) => s.transcriptions)
+            .map((s) => {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const raw = s.transcriptions as any;
+                const countArr = raw.utterances;
+                const utterance_count =
+                    Array.isArray(countArr) && countArr.length > 0
+                        ? countArr[0].count ?? 0
+                        : 0;
+                const { utterances: _u, ...rest } = raw;
+                return {
+                    ...rest,
+                    utterance_count,
+                    is_shared: true,
+                    shared_by_email: emailMap[s.shared_by] ?? "Desconhecido",
+                } as Transcription;
+            });
     }
 
     const items = transcriptions ?? [];

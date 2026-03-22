@@ -1,7 +1,36 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 
+// ─── Rate Limiting (in-memory sliding window) ─────────────────────────────────
+const rateLimitMap = new Map<string, number[]>();
+const RATE_LIMIT_WINDOW_MS = 60_000; // 1 minuto
+const RATE_LIMIT_MAX = 60; // máximo 60 requisições por minuto por IP
+
+function isRateLimited(ip: string): boolean {
+    const now = Date.now();
+    const timestamps = (rateLimitMap.get(ip) ?? []).filter(
+        (ts) => now - ts < RATE_LIMIT_WINDOW_MS
+    );
+    timestamps.push(now);
+    rateLimitMap.set(ip, timestamps);
+    return timestamps.length > RATE_LIMIT_MAX;
+}
+
 export async function middleware(request: NextRequest) {
+    // Rate limiting para rotas de API
+    if (request.nextUrl.pathname.startsWith("/api/")) {
+        const ip =
+            request.headers.get("x-forwarded-for")?.split(",")[0].trim() ??
+            request.headers.get("x-real-ip") ??
+            "unknown";
+        if (isRateLimited(ip)) {
+            return new NextResponse(JSON.stringify({ error: "Too many requests" }), {
+                status: 429,
+                headers: { "Content-Type": "application/json", "Retry-After": "60" },
+            });
+        }
+    }
+
     let supabaseResponse = NextResponse.next({ request });
 
     const supabase = createServerClient(
@@ -53,6 +82,6 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
     matcher: [
-        "/((?!_next/static|_next/image|favicon.ico|api/|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+        "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
     ],
 };

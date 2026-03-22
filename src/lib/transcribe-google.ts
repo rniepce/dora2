@@ -1,9 +1,15 @@
-import { writeFile, unlink, readFile } from "fs/promises";
-import { execSync } from "child_process";
+import { writeFile, unlink, readFile, open, stat } from "fs/promises";
+import { createWriteStream } from "fs";
+import { pipeline } from "stream/promises";
+import { execFile } from "child_process";
+import { promisify } from "util";
 import { tmpdir } from "os";
+
+const execFileAsync = promisify(execFile);
 import { join } from "path";
 import { randomUUID } from "crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { validateMediaBuffer } from "./validate-media";
 
 const VIDEO_EXTENSIONS = new Set(["mp4", "mkv", "avi", "mov", "webm", "flv", "wmv"]);
 const CHUNK_DURATION_SEC = 480; // 8 min — margem segura para Recognize (~10 min max)
@@ -67,39 +73,53 @@ export async function runGoogleTranscription(
 
     await updateProgress(15, "transcribing");
 
-    // 2. Baixar arquivo
+    // 2. Baixar arquivo via stream para disco
     await updateProgress(20);
     console.log("[Google] Downloading media from:", transcription.media_url);
     const mediaResponse = await fetch(transcription.media_url);
     if (!mediaResponse.ok) throw new Error("Não foi possível baixar o arquivo do Storage");
-    const mediaBuffer = Buffer.from(await mediaResponse.arrayBuffer());
-    console.log(`[Google] Downloaded: ${(mediaBuffer.length / 1024 / 1024).toFixed(1)}MB`);
 
-    // 3. Converter para WAV mono 16kHz (formato ideal para Chirp 3)
     const urlPath = new URL(transcription.media_url).pathname;
     const ext = urlPath.split(".").pop()?.toLowerCase() ?? "";
-    const isVideo = VIDEO_EXTENSIONS.has(ext);
     const tmpId = randomUUID();
+    const downloadPath = join(tmpdir(), `gc-download-${tmpId}.${ext || "mp4"}`);
 
+    if (mediaResponse.body) {
+        const dest = createWriteStream(downloadPath);
+        await pipeline(mediaResponse.body as unknown as NodeJS.ReadableStream, dest);
+    } else {
+        await writeFile(downloadPath, Buffer.from(await mediaResponse.arrayBuffer()));
+    }
+
+    // Validar magic bytes (ler apenas cabeçalho)
+    const headerBuf = Buffer.alloc(4096);
+    const fh = await open(downloadPath, "r");
+    const { bytesRead } = await fh.read(headerBuf, 0, 4096, 0);
+    await fh.close();
+    await validateMediaBuffer(headerBuf.subarray(0, bytesRead), transcription.media_url);
+
+    const fileSizeMB = (await stat(downloadPath)).size / 1024 / 1024;
+    console.log(`[Google] Downloaded: ${fileSizeMB.toFixed(1)}MB`);
+
+    // 3. Converter para WAV mono 16kHz (formato ideal para Chirp 3)
     await updateProgress(25);
     console.log("[Google] Converting to WAV (mono 16kHz)...");
 
-    const inputPath = join(tmpdir(), `gc-input-${tmpId}.${ext || "mp4"}`);
     const outputPath = join(tmpdir(), `gc-output-${tmpId}.wav`);
 
     let audioBuffer: Buffer;
 
     try {
-        await writeFile(inputPath, mediaBuffer);
-        execSync(
-            `ffmpeg -i "${inputPath}" -vn -acodec pcm_s16le -ar 16000 -ac 1 -y "${outputPath}"`,
-            { timeout: 600000, stdio: "pipe" }
-        );
+        await execFileAsync("ffmpeg", [
+            "-i", downloadPath,
+            "-vn", "-acodec", "pcm_s16le", "-ar", "16000", "-ac", "1", "-y",
+            outputPath,
+        ], { timeout: 600000 });
         audioBuffer = await readFile(outputPath);
         console.log(`[Google] Converted: ${(audioBuffer.length / 1024 / 1024).toFixed(1)}MB WAV`);
     } finally {
-        await unlink(inputPath).catch(() => { });
-        await unlink(outputPath).catch(() => { });
+        await unlink(downloadPath).catch((e) => { console.error("[Google] Failed to delete downloadPath:", e); });
+        await unlink(outputPath).catch((e) => { console.error("[Google] Failed to delete outputPath:", e); });
     }
 
     // 4. Transcrever (com chunking se necessário)
@@ -126,11 +146,13 @@ export async function runGoogleTranscription(
         await writeFile(chunkInputPath, audioBuffer);
 
         try {
-            const durationStr = execSync(
-                `ffprobe -v error -show_entries format=duration -of csv=p=0 "${chunkInputPath}"`,
-                { timeout: 30000, encoding: "utf-8" }
-            ).trim();
-            const totalDuration = parseFloat(durationStr);
+            const { stdout: durationStr } = await execFileAsync("ffprobe", [
+                "-v", "error",
+                "-show_entries", "format=duration",
+                "-of", "csv=p=0",
+                chunkInputPath,
+            ], { timeout: 30000 });
+            const totalDuration = parseFloat(durationStr.trim());
             const numChunks = Math.ceil(totalDuration / CHUNK_DURATION_SEC);
             console.log(`[Google] Duration: ${totalDuration.toFixed(0)}s, ${numChunks} chunks`);
 
@@ -139,10 +161,13 @@ export async function runGoogleTranscription(
                 const chunkPath = join(tmpdir(), `gc-chunk-${tmpId}-${i}.wav`);
 
                 try {
-                    execSync(
-                        `ffmpeg -i "${chunkInputPath}" -ss ${startSec} -t ${CHUNK_DURATION_SEC} -acodec pcm_s16le -ar 16000 -ac 1 -y "${chunkPath}"`,
-                        { timeout: 120000, stdio: "pipe" }
-                    );
+                    await execFileAsync("ffmpeg", [
+                        "-i", chunkInputPath,
+                        "-ss", String(startSec),
+                        "-t", String(CHUNK_DURATION_SEC),
+                        "-acodec", "pcm_s16le", "-ar", "16000", "-ac", "1", "-y",
+                        chunkPath,
+                    ], { timeout: 120000 });
                     const chunkBuffer = await readFile(chunkPath);
                     const chunkResults = await callGoogleRecognize(chunkBuffer);
                     const chunkUtterances = parseResults(chunkResults, startSec);
@@ -151,11 +176,11 @@ export async function runGoogleTranscription(
                     const chunkProgress = 35 + Math.round(((i + 1) / numChunks) * 20);
                     await updateProgress(chunkProgress);
                 } finally {
-                    await unlink(chunkPath).catch(() => { });
+                    await unlink(chunkPath).catch((e) => { console.error("[Google] Failed to delete chunkPath:", e); });
                 }
             }
         } finally {
-            await unlink(chunkInputPath).catch(() => { });
+            await unlink(chunkInputPath).catch((e) => { console.error("[Google] Failed to delete chunkInputPath:", e); });
         }
     } else {
         await updateProgress(35);

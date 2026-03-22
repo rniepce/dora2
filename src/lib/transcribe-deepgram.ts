@@ -1,9 +1,15 @@
-import { writeFile, unlink, readFile } from "fs/promises";
-import { execSync } from "child_process";
+import { writeFile, unlink, readFile, open, stat } from "fs/promises";
+import { createWriteStream, createReadStream } from "fs";
+import { pipeline } from "stream/promises";
+import { execFile } from "child_process";
+import { promisify } from "util";
 import { tmpdir } from "os";
+
+const execFileAsync = promisify(execFile);
 import { join } from "path";
 import { randomUUID } from "crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { validateMediaBuffer } from "./validate-media";
 
 const VIDEO_EXTENSIONS = new Set(["mp4", "mkv", "avi", "mov", "webm", "flv", "wmv"]);
 
@@ -29,49 +35,65 @@ export async function runDeepgramTranscription(
 
     await updateProgress(15, "transcribing");
 
-    // 2. Baixar arquivo
+    // 2. Baixar arquivo via stream para disco
     await updateProgress(20);
     console.log("[Deepgram] Downloading media from:", transcription.media_url);
     const mediaResponse = await fetch(transcription.media_url);
     if (!mediaResponse.ok) throw new Error("Não foi possível baixar o arquivo do Storage");
-    const mediaBuffer = Buffer.from(await mediaResponse.arrayBuffer());
-    console.log(`[Deepgram] Downloaded: ${(mediaBuffer.length / 1024 / 1024).toFixed(1)}MB`);
 
-    // 3. Converter se vídeo
     const urlPath = new URL(transcription.media_url).pathname;
     const ext = urlPath.split(".").pop()?.toLowerCase() ?? "";
+    const tmpId = randomUUID();
+    const downloadPath = join(tmpdir(), `dg-download-${tmpId}.${ext || "mp3"}`);
+
+    if (mediaResponse.body) {
+        const dest = createWriteStream(downloadPath);
+        await pipeline(mediaResponse.body as unknown as NodeJS.ReadableStream, dest);
+    } else {
+        await writeFile(downloadPath, Buffer.from(await mediaResponse.arrayBuffer()));
+    }
+
+    // Validar magic bytes (ler apenas cabeçalho)
+    const headerBuf = Buffer.alloc(4096);
+    const fh = await open(downloadPath, "r");
+    const { bytesRead } = await fh.read(headerBuf, 0, 4096, 0);
+    await fh.close();
+    await validateMediaBuffer(headerBuf.subarray(0, bytesRead), transcription.media_url);
+
+    const fileSizeMB = (await stat(downloadPath)).size / 1024 / 1024;
+    console.log(`[Deepgram] Downloaded: ${fileSizeMB.toFixed(1)}MB`);
+
+    // 3. Converter se vídeo
     const isVideo = VIDEO_EXTENSIONS.has(ext);
 
-    let audioBuffer: Buffer;
+    let audioPath: string;
     let contentType = "audio/mpeg";
 
+    try {
     if (isVideo) {
         await updateProgress(25);
         console.log("[Deepgram] Converting video to MP3...");
-        const tmpId = randomUUID();
-        const inputPath = join(tmpdir(), `dg-input-${tmpId}.${ext}`);
         const outputPath = join(tmpdir(), `dg-output-${tmpId}.mp3`);
 
-        try {
-            await writeFile(inputPath, mediaBuffer);
-            execSync(
-                `ffmpeg -i "${inputPath}" -vn -acodec libmp3lame -ab 128k -ar 22050 -ac 1 -y "${outputPath}"`,
-                { timeout: 300000, stdio: "pipe" }
-            );
-            audioBuffer = await readFile(outputPath);
-            console.log(`[Deepgram] Converted: ${(audioBuffer.length / 1024 / 1024).toFixed(1)}MB`);
-        } finally {
-            await unlink(inputPath).catch(() => { });
-            await unlink(outputPath).catch(() => { });
-        }
+        await execFileAsync("ffmpeg", [
+            "-i", downloadPath,
+            "-vn", "-acodec", "libmp3lame", "-ab", "128k", "-ar", "22050", "-ac", "1", "-y",
+            outputPath,
+        ], { timeout: 300000 });
+        audioPath = outputPath;
+        const convertedMB = (await stat(outputPath)).size / 1024 / 1024;
+        console.log(`[Deepgram] Converted: ${convertedMB.toFixed(1)}MB`);
     } else {
-        audioBuffer = mediaBuffer;
+        audioPath = downloadPath;
         const ctMap: Record<string, string> = {
             mp3: "audio/mpeg", wav: "audio/wav", ogg: "audio/ogg",
             m4a: "audio/mp4", aac: "audio/aac", flac: "audio/flac",
         };
         contentType = ctMap[ext] ?? "audio/mpeg";
     }
+
+    // Ler para buffer para enviar à API Deepgram
+    const audioBuffer = await readFile(audioPath);
 
     // 4. Enviar para Deepgram
     await updateProgress(35);
@@ -165,4 +187,12 @@ export async function runDeepgramTranscription(
     }
 
     await updateProgress(65, "formatting");
+    } finally {
+        await unlink(downloadPath).catch((e) => { console.error("[Deepgram] Failed to delete downloadPath:", e); });
+        // Limpar arquivo convertido se diferente do download
+        if (isVideo) {
+            const outputPath = join(tmpdir(), `dg-output-${tmpId}.mp3`);
+            await unlink(outputPath).catch(() => {});
+        }
+    }
 }

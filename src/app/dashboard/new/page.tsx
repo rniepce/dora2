@@ -69,19 +69,44 @@ export default function NewTranscriptionPage() {
     const [progress, setProgress] = useState(0);
     const [progressLabel, setProgressLabel] = useState("");
     const [transcriptionId, setTranscriptionId] = useState<string | null>(null);
-    const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+    const pollingRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const pollStartRef = useRef<number | null>(null);
+
+    const MAX_POLL_DURATION_MS = 30 * 60 * 1000; // 30 minutos
 
     // ─── Polling para progresso real ────────────────────────────────────────
     useEffect(() => {
         if (!transcriptionId || isDone || isError) {
-            if (pollingRef.current) clearInterval(pollingRef.current);
+            if (pollingRef.current) clearTimeout(pollingRef.current);
             return;
         }
 
+        if (pollStartRef.current === null) {
+            pollStartRef.current = Date.now();
+        }
+
+        const scheduleNext = (delayMs: number) => {
+            if (pollingRef.current) clearTimeout(pollingRef.current);
+            pollingRef.current = setTimeout(poll, delayMs);
+        };
+
         const poll = async () => {
+            // Timeout máximo de 30 min
+            if (pollStartRef.current !== null && Date.now() - pollStartRef.current > MAX_POLL_DURATION_MS) {
+                setIsError(true);
+                setIsProcessing(false);
+                setErrorMsg("Tempo máximo de processamento atingido (30 min). Tente novamente.");
+                if (pollingRef.current) clearTimeout(pollingRef.current);
+                return;
+            }
+
             try {
                 const res = await fetch(`/api/status/${transcriptionId}`);
-                if (!res.ok) return;
+                if (!res.ok) {
+                    // Jitter: 2–4s em caso de erro de rede
+                    scheduleNext(2000 + Math.random() * 2000);
+                    return;
+                }
                 const data = await res.json();
                 setProgress(data.progress);
                 setProgressLabel(data.label);
@@ -92,7 +117,7 @@ export default function NewTranscriptionPage() {
                     setProgress(100);
                     setProgressLabel("Concluído!");
                     toast.success("Degravação concluída!");
-                    if (pollingRef.current) clearInterval(pollingRef.current);
+                    if (pollingRef.current) clearTimeout(pollingRef.current);
                     setTimeout(() => {
                         router.push("/dashboard");
                         router.refresh();
@@ -101,17 +126,22 @@ export default function NewTranscriptionPage() {
                     setIsError(true);
                     setIsProcessing(false);
                     setProgressLabel("Erro no processamento");
-                    if (pollingRef.current) clearInterval(pollingRef.current);
+                    if (pollingRef.current) clearTimeout(pollingRef.current);
+                } else {
+                    // Intervalo base 2s + jitter de até 500ms
+                    scheduleNext(2000 + Math.random() * 500);
                 }
-            } catch { /* ignore polling errors */ }
+            } catch { /* ignore polling errors, retry */
+                scheduleNext(2000 + Math.random() * 2000);
+            }
         };
 
-        pollingRef.current = setInterval(poll, 2000);
         poll(); // primeira chamada imediata
 
         return () => {
-            if (pollingRef.current) clearInterval(pollingRef.current);
+            if (pollingRef.current) clearTimeout(pollingRef.current);
         };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [transcriptionId, isDone, isError, router]);
 
     // ─── File selection ──────────────────────────────────────────────────────
@@ -228,14 +258,17 @@ export default function NewTranscriptionPage() {
                 throw new Error(updateResult.error);
             }
 
-            // 4. Disparar pipeline de processamento (não-bloqueante para o polling)
-            fetch("/api/process", {
+            // 4. Disparar pipeline de processamento — verificar se a chamada foi aceita
+            const processRes = await fetch("/api/process", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ transcriptionId: result.id, engine }),
-            }).catch((err) => {
-                console.error("Process error:", err);
             });
+
+            if (!processRes.ok) {
+                const errData = await processRes.json().catch(() => ({}));
+                throw new Error(errData?.error ?? `Erro ao iniciar processamento (${processRes.status})`);
+            }
 
             // O polling cuida do resto! O useEffect acima vai atualizar o progresso
             toast.info("Pipeline de IA iniciado!", {

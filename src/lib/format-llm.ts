@@ -64,20 +64,29 @@ export async function runFormatting(
         const systemPrompt = buildSystemPrompt(glossary);
         const userPrompt = JSON.stringify(batch, null, 2);
 
-        const llmRes = await fetch(chatUrl, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "api-key": apiKey,
-            },
-            body: JSON.stringify({
-                messages: [
-                    { role: "system", content: systemPrompt },
-                    { role: "user", content: userPrompt },
-                ],
-                max_completion_tokens: 8000,
-            }),
-        });
+        const llmController = new AbortController();
+        const llmTimeout = setTimeout(() => llmController.abort(), 120_000); // 2 min por batch
+
+        let llmRes: Response;
+        try {
+            llmRes = await fetch(chatUrl, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "api-key": apiKey,
+                },
+                body: JSON.stringify({
+                    messages: [
+                        { role: "system", content: systemPrompt },
+                        { role: "user", content: userPrompt },
+                    ],
+                    max_completion_tokens: 8000,
+                }),
+                signal: llmController.signal,
+            });
+        } finally {
+            clearTimeout(llmTimeout);
+        }
 
         if (!llmRes.ok) {
             const errText = await llmRes.text();
@@ -112,7 +121,19 @@ export async function runFormatting(
     await updateProgress(100, "completed");
 }
 
-function buildSystemPrompt(glossary: string): string {
+/** Remove markdown headings, separators and limits length to prevent prompt injection */
+function sanitizeGlossary(raw: string): string {
+    return raw
+        .replace(/^#{1,6}\s+.*/gm, "")       // remove markdown headings
+        .replace(/^[-_*]{3,}\s*$/gm, "")      // remove separators like ---, ___, ***
+        .replace(/`{3}[\s\S]*?`{3}/g, "")     // remove code blocks
+        .replace(/\n{3,}/g, "\n\n")           // collapse excessive blank lines
+        .trim()
+        .slice(0, 2000);                       // limit to 2000 chars
+}
+
+export function buildSystemPrompt(glossary: string): string {
+    const safeGlossary = glossary ? sanitizeGlossary(glossary) : "";
     return `Você é um assistente especializado em degravação de audiências judiciais brasileiras do TJMG.
 
 ## Sua Tarefa Principal
@@ -168,7 +189,7 @@ Analise o CONTEÚDO e o CONTEXTO CONVERSACIONAL para determinar quem está falan
 
 ### 4. NUNCA alterar start_times — são referências de sincronização
 
-${glossary ? `## Glossário de Referência\nOs seguintes nomes e termos aparecem nesta audiência:\n${glossary}\n\nUse estes nomes para melhorar a identificação dos locutores.\n` : ""}
+${safeGlossary ? `## Glossário de Referência\nOs seguintes nomes e termos aparecem nesta audiência:\n${safeGlossary}\n\nUse estes nomes para melhorar a identificação dos locutores.\n` : ""}
 ## Formato de Resposta
 Retorne APENAS um array JSON válido:
 \`\`\`json
@@ -184,30 +205,34 @@ Retorne APENAS um array JSON válido:
 IMPORTANTE: Retorne APENAS o JSON, sem markdown, sem explicações, sem texto antes ou depois.`;
 }
 
-function parseLLMResponse(
+export function parseLLMResponse(
     response: string
 ): Array<{ id: string; speaker_label: string; text: string }> | null {
+    // Tentativa 1: JSON direto
     try {
         const parsed = JSON.parse(response);
         if (Array.isArray(parsed)) return parsed;
+    } catch { /* não é JSON direto, tentar fallbacks */ }
 
+    // Tentativa 2: JSON dentro de markdown code block
+    try {
         const jsonMatch = response.match(/```(?:json)?\s*([\s\S]*?)```/);
         if (jsonMatch?.[1]) {
             const inner = JSON.parse(jsonMatch[1].trim());
             if (Array.isArray(inner)) return inner;
         }
+    } catch { /* continuar */ }
 
+    // Tentativa 3: encontrar array no meio do texto
+    try {
         const arrayMatch = response.match(/\[[\s\S]*\]/);
         if (arrayMatch) {
             const arr = JSON.parse(arrayMatch[0]);
             if (Array.isArray(arr)) return arr;
         }
+    } catch { /* continuar */ }
 
-        console.error("[Format] Could not parse LLM response");
-        return null;
-    } catch (err) {
-        console.error("[Format] Parse error:", err);
-        console.error("[Format] Raw:", response.substring(0, 500));
-        return null;
-    }
+    console.error("[Format] Could not parse LLM response");
+    console.error("[Format] Raw:", response.substring(0, 500));
+    return null;
 }

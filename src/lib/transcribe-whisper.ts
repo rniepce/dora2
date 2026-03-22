@@ -1,9 +1,15 @@
-import { writeFile, unlink, readFile } from "fs/promises";
-import { execSync } from "child_process";
+import { writeFile, unlink, readFile, open } from "fs/promises";
+import { createWriteStream } from "fs";
+import { pipeline } from "stream/promises";
+import { execFile } from "child_process";
+import { promisify } from "util";
 import { tmpdir } from "os";
+
+const execFileAsync = promisify(execFile);
 import { join } from "path";
 import { randomUUID } from "crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { validateMediaBuffer } from "./validate-media";
 
 const VIDEO_EXTENSIONS = new Set(["mp4", "mkv", "avi", "mov", "webm", "flv", "wmv"]);
 const MAX_WHISPER_SIZE = 24 * 1024 * 1024;
@@ -31,45 +37,67 @@ export async function runWhisperTranscription(
 
     await updateProgress(15, "transcribing");
 
-    // 2. Baixar arquivo
+    // 2. Baixar arquivo via stream diretamente para disco (evita carregar 1GB em memória)
     await updateProgress(20);
     console.log("[Whisper] Downloading media from:", transcription.media_url);
     const mediaResponse = await fetch(transcription.media_url);
     if (!mediaResponse.ok) throw new Error("Não foi possível baixar o arquivo do Storage");
-    const mediaBuffer = Buffer.from(await mediaResponse.arrayBuffer());
-    console.log(`[Whisper] Downloaded: ${(mediaBuffer.length / 1024 / 1024).toFixed(1)}MB`);
 
-    // 3. Converter para MP3
     const urlPath = new URL(transcription.media_url).pathname;
     const ext = urlPath.split(".").pop()?.toLowerCase() ?? "";
+    const tmpId = randomUUID();
+    const downloadPath = join(tmpdir(), `ws-download-${tmpId}.${ext || "mp3"}`);
+
+    // Stream para disco
+    if (mediaResponse.body) {
+        const dest = createWriteStream(downloadPath);
+        await pipeline(mediaResponse.body as unknown as NodeJS.ReadableStream, dest);
+    } else {
+        const buf = Buffer.from(await mediaResponse.arrayBuffer());
+        await writeFile(downloadPath, buf);
+    }
+
+    // Ler apenas o início para magic bytes (primeiros 4KB bastam)
+    const headerBuf = Buffer.alloc(4096);
+    const fh = await open(downloadPath, "r");
+    const { bytesRead } = await fh.read(headerBuf, 0, 4096, 0);
+    await fh.close();
+    const mediaBuffer = headerBuf.subarray(0, bytesRead);
+
+    const stats = await import("fs/promises").then((m) => m.stat(downloadPath));
+    console.log(`[Whisper] Downloaded: ${(stats.size / 1024 / 1024).toFixed(1)}MB`);
+
+    // Validar magic bytes do arquivo
+    await validateMediaBuffer(mediaBuffer, transcription.media_url);
+
+    // 3. Converter para MP3 (usa o arquivo já em disco — não carrega em memória)
+    try {
     const isVideo = VIDEO_EXTENSIONS.has(ext);
-    const needsConversion = isVideo || mediaBuffer.length > MAX_WHISPER_SIZE;
+    const fileSizeBytes = stats.size;
+    const needsConversion = isVideo || fileSizeBytes > MAX_WHISPER_SIZE;
 
     let audioBuffer: Buffer;
     let audioFilename: string;
-    const tmpId = randomUUID();
 
     if (needsConversion) {
         await updateProgress(25);
         console.log("[Whisper] Converting to MP3 (128kbps/22kHz)...");
-        const inputPath = join(tmpdir(), `input-${tmpId}.${ext || "mp4"}`);
         const outputPath = join(tmpdir(), `output-${tmpId}.mp3`);
 
         try {
-            await writeFile(inputPath, mediaBuffer);
-            execSync(
-                `ffmpeg -i "${inputPath}" -vn -acodec libmp3lame -ab 128k -ar 22050 -ac 1 -y "${outputPath}"`,
-                { timeout: 300000, stdio: "pipe" }
-            );
+            await execFileAsync("ffmpeg", [
+                "-i", downloadPath,
+                "-vn", "-acodec", "libmp3lame", "-ab", "128k", "-ar", "22050", "-ac", "1", "-y",
+                outputPath,
+            ], { timeout: 300000 });
             audioBuffer = await readFile(outputPath);
             audioFilename = "audio.mp3";
             console.log(`[Whisper] Converted: ${(audioBuffer.length / 1024 / 1024).toFixed(1)}MB`);
         } finally {
-            await unlink(inputPath).catch(() => { });
-            await unlink(outputPath).catch(() => { });
+            await unlink(outputPath).catch((e) => { console.error("[Whisper] Failed to delete outputPath:", e); });
         }
     } else {
-        audioBuffer = mediaBuffer;
+        audioBuffer = await readFile(downloadPath);
         audioFilename = `audio.${ext || "mp3"}`;
     }
 
@@ -83,11 +111,13 @@ export async function runWhisperTranscription(
         await writeFile(chunkInputPath, audioBuffer);
 
         try {
-            const durationStr = execSync(
-                `ffprobe -v error -show_entries format=duration -of csv=p=0 "${chunkInputPath}"`,
-                { timeout: 30000, encoding: "utf-8" }
-            ).trim();
-            const totalDuration = parseFloat(durationStr);
+            const { stdout: durationStr } = await execFileAsync("ffprobe", [
+                "-v", "error",
+                "-show_entries", "format=duration",
+                "-of", "csv=p=0",
+                chunkInputPath,
+            ], { timeout: 30000 });
+            const totalDuration = parseFloat(durationStr.trim());
             const numChunks = Math.ceil(totalDuration / CHUNK_DURATION_SEC);
             console.log(`[Whisper] Duration: ${totalDuration.toFixed(0)}s, ${numChunks} chunks`);
 
@@ -96,10 +126,13 @@ export async function runWhisperTranscription(
                 const chunkPath = join(tmpdir(), `chunk-${tmpId}-${i}.mp3`);
 
                 try {
-                    execSync(
-                        `ffmpeg -i "${chunkInputPath}" -ss ${startSec} -t ${CHUNK_DURATION_SEC} -acodec libmp3lame -ab 128k -ar 22050 -ac 1 -y "${chunkPath}"`,
-                        { timeout: 120000, stdio: "pipe" }
-                    );
+                    await execFileAsync("ffmpeg", [
+                        "-i", chunkInputPath,
+                        "-ss", String(startSec),
+                        "-t", String(CHUNK_DURATION_SEC),
+                        "-acodec", "libmp3lame", "-ab", "128k", "-ar", "22050", "-ac", "1", "-y",
+                        chunkPath,
+                    ], { timeout: 120000 });
                     const chunkBuffer = await readFile(chunkPath);
                     const chunkSegments = await callWhisperAPI(chunkBuffer, `chunk_${i}.mp3`);
 
@@ -114,11 +147,11 @@ export async function runWhisperTranscription(
                     const chunkProgress = 35 + Math.round(((i + 1) / numChunks) * 20);
                     await updateProgress(chunkProgress);
                 } finally {
-                    await unlink(chunkPath).catch(() => { });
+                    await unlink(chunkPath).catch((e) => { console.error("[Whisper] Failed to delete chunkPath:", e); });
                 }
             }
         } finally {
-            await unlink(chunkInputPath).catch(() => { });
+            await unlink(chunkInputPath).catch((e) => { console.error("[Whisper] Failed to delete chunkInputPath:", e); });
         }
     } else {
         await updateProgress(35);
@@ -162,6 +195,10 @@ export async function runWhisperTranscription(
     }
 
     await updateProgress(65, "formatting");
+    } finally {
+        // Limpar arquivo de download
+        await unlink(downloadPath).catch((e) => { console.error("[Whisper] Failed to delete downloadPath:", e); });
+    }
 }
 
 async function callWhisperAPI(

@@ -19,6 +19,7 @@ export const maxDuration = 300;
  * Chamadas diretas (sem fetch interno) para compatibilidade com Railway.
  */
 export async function POST(request: Request) {
+    const requestId = crypto.randomUUID();
     try {
         const { transcriptionId, engine = "whisper" } = await request.json();
 
@@ -34,7 +35,7 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
         }
 
-        console.log(`[Process] Starting pipeline for ${transcriptionId} (user: ${user.id}) with engine: ${engine}`);
+        console.log(`[Process][${requestId}] Starting pipeline for ${transcriptionId} (user: ${user.id}) with engine: ${engine}`);
 
         // 1. Transcrição
         try {
@@ -47,7 +48,7 @@ export async function POST(request: Request) {
             }
         } catch (err) {
             const errMsg = err instanceof Error ? err.message : "Erro desconhecido";
-            console.error(`[Process] Transcription failed:`, errMsg);
+            console.error(`[Process][${requestId}] Transcription failed:`, errMsg);
             await supabase
                 .from("transcriptions")
                 .update({ status: "error", error_message: errMsg, updated_at: new Date().toISOString() })
@@ -63,7 +64,7 @@ export async function POST(request: Request) {
             await runFormatting(transcriptionId, supabase);
         } catch (err) {
             const errMsg = err instanceof Error ? err.message : "Erro desconhecido";
-            console.error(`[Process] Formatting failed:`, errMsg);
+            console.error(`[Process][${requestId}] Formatting failed:`, errMsg);
             await supabase
                 .from("transcriptions")
                 .update({ status: "error", error_message: errMsg, updated_at: new Date().toISOString() })
@@ -74,7 +75,7 @@ export async function POST(request: Request) {
             );
         }
 
-        console.log(`[Process] Pipeline complete for ${transcriptionId}`);
+        console.log(`[Process][${requestId}] Pipeline complete for ${transcriptionId}`);
         return NextResponse.json({
             success: true,
             engine,

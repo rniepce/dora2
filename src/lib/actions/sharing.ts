@@ -51,9 +51,9 @@ export async function shareTranscriptionAction(
         .rpc("get_user_id_by_email", { target_email: email.toLowerCase() });
 
     if (lookupError || !targetUsers || targetUsers.length === 0) {
-        // Fallback: tentar buscar de outra forma ou retornar erro amigável
+        // Resposta genérica para evitar enumeração de usuários (não revelar se o email existe)
         return {
-            error: `Nenhum usuário encontrado com o email "${email}". O usuário precisa ter uma conta no sistema.`,
+            error: "Não foi possível compartilhar. Verifique o email e tente novamente.",
         };
     }
 
