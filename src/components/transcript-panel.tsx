@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { memo, useEffect, useRef } from "react";
 import { Clock } from "lucide-react";
 import type { Utterance, Word } from "@/lib/types";
 
@@ -101,7 +101,7 @@ function HighlightedWords({
     );
 }
 
-export function TranscriptPanel({
+export const TranscriptPanel = memo(function TranscriptPanel({
     utterances,
     activeUtteranceId,
     currentTime,
@@ -190,5 +190,5 @@ export function TranscriptPanel({
             })}
         </div>
     );
-}
+});
 

@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { createServerClient } from "@/lib/supabase-server";
 import { EditorClient } from "@/components/editor-client";
+import { ErrorBoundary } from "@/components/error-boundary";
 import type { Transcription, Utterance } from "@/lib/types";
 
 interface EditorPageProps {
@@ -31,9 +32,11 @@ export default async function EditorPage({ params }: EditorPageProps) {
         .returns<Utterance[]>();
 
     return (
-        <EditorClient
-            transcription={transcription}
-            utterances={utterances ?? []}
-        />
+        <ErrorBoundary fallbackMessage="Erro ao carregar o editor">
+            <EditorClient
+                transcription={transcription}
+                utterances={utterances ?? []}
+            />
+        </ErrorBoundary>
     );
 }

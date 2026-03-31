@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase-server";
+import { checkRateLimit } from "@/lib/rate-limit";
+import { processRequestSchema } from "@/lib/validations";
 import { runWhisperTranscription } from "@/lib/transcribe-whisper";
 import { runDeepgramTranscription } from "@/lib/transcribe-deepgram";
 import { runGoogleTranscription } from "@/lib/transcribe-google";
@@ -20,11 +22,17 @@ export const maxDuration = 300;
  */
 export async function POST(request: Request) {
     try {
-        const { transcriptionId, engine = "whisper" } = await request.json();
+        const body = await request.json();
+        const parsed = processRequestSchema.safeParse(body);
 
-        if (!transcriptionId) {
-            return NextResponse.json({ error: "transcriptionId é obrigatório" }, { status: 400 });
+        if (!parsed.success) {
+            return NextResponse.json(
+                { error: "Dados inválidos", details: parsed.error.flatten().fieldErrors },
+                { status: 400 }
+            );
         }
+
+        const { transcriptionId, engine } = parsed.data;
 
         const supabase = await createServerClient();
 
@@ -32,6 +40,15 @@ export async function POST(request: Request) {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) {
             return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
+        }
+
+        // ── Rate limit: 5 transcrições por hora por usuário ──────────────
+        const rl = checkRateLimit(`process:${user.id}`, 5, 3600_000);
+        if (!rl.allowed) {
+            return NextResponse.json(
+                { error: "Limite de transcrições atingido. Tente novamente em breve." },
+                { status: 429 }
+            );
         }
 
         console.log(`[Process] Starting pipeline for ${transcriptionId} (user: ${user.id}) with engine: ${engine}`);

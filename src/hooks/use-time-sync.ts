@@ -29,6 +29,21 @@ export function useTimeSync({ utterances }: UseTimeSyncOptions): UseTimeSyncRetu
     const [playbackRate, setPlaybackRateState] = useState(1);
     const [activeUtteranceId, setActiveUtteranceId] = useState<string | null>(null);
 
+    // Use ref for utterances to avoid re-registering RAF loop when utterances change
+    const utterancesRef = useRef(utterances);
+    utterancesRef.current = utterances;
+
+    // Helper: find active utterance by timestamp
+    const findActiveUtterance = useCallback((t: number) => {
+        const utts = utterancesRef.current;
+        for (let i = utts.length - 1; i >= 0; i--) {
+            if (t >= utts[i].start_time) {
+                return utts[i];
+            }
+        }
+        return null;
+    }, []);
+
     // Atualiza currentTime via RAF para tracking suave (palavra a palavra)
     useEffect(() => {
         const media = mediaRef.current;
@@ -39,17 +54,8 @@ export function useTimeSync({ utterances }: UseTimeSyncOptions): UseTimeSyncRetu
         const tick = () => {
             const t = media.currentTime;
             setCurrentTime(t);
-
-            // Encontrar a utterance ativa pelo timestamp (find last utterance where start_time <= t)
-            let active = null;
-            for (let i = utterances.length - 1; i >= 0; i--) {
-                if (t >= utterances[i].start_time) {
-                    active = utterances[i];
-                    break;
-                }
-            }
+            const active = findActiveUtterance(t);
             setActiveUtteranceId(active?.id ?? null);
-
             rafId = requestAnimationFrame(tick);
         };
 
@@ -65,28 +71,19 @@ export function useTimeSync({ utterances }: UseTimeSyncOptions): UseTimeSyncRetu
             }
         };
         const handleSeeked = () => {
-            // Update immediately on seek even if paused
             const t = media.currentTime;
             setCurrentTime(t);
-            let active = null;
-            for (let i = utterances.length - 1; i >= 0; i--) {
-                if (t >= utterances[i].start_time) {
-                    active = utterances[i];
-                    break;
-                }
-            }
+            const active = findActiveUtterance(t);
             setActiveUtteranceId(active?.id ?? null);
         };
         const handleDurationChange = () => setDuration(media.duration || 0);
         const handleLoadedMetadata = () => {
             setDuration(media.duration || 0);
-            media.playbackRate = playbackRate; // restore rate after load
+            media.playbackRate = playbackRate;
         };
         const handleRateChange = () => setPlaybackRateState(media.playbackRate);
 
-        // If already playing on mount, start RAF loop
         if (!media.paused) {
-            // eslint-disable-next-line react-hooks/set-state-in-effect
             setIsPlaying(true);
             rafId = requestAnimationFrame(tick);
         }
@@ -107,7 +104,7 @@ export function useTimeSync({ utterances }: UseTimeSyncOptions): UseTimeSyncRetu
             media.removeEventListener("loadedmetadata", handleLoadedMetadata);
             media.removeEventListener("ratechange", handleRateChange);
         };
-    }, [utterances, playbackRate]);
+    }, [playbackRate, findActiveUtterance]);
 
     // Pula o player para um timestamp específico
     const seekTo = useCallback((time: number) => {

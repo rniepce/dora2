@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase-server";
+import { checkRateLimit } from "@/lib/rate-limit";
+import { summarizeRequestSchema } from "@/lib/validations";
 
 /**
  * POST /api/summarize
@@ -10,11 +12,17 @@ import { createServerClient } from "@/lib/supabase-server";
  */
 export async function POST(request: Request) {
     try {
-        const { transcriptionId, force } = await request.json();
+        const body = await request.json();
+        const parsed = summarizeRequestSchema.safeParse(body);
 
-        if (!transcriptionId) {
-            return NextResponse.json({ error: "transcriptionId é obrigatório" }, { status: 400 });
+        if (!parsed.success) {
+            return NextResponse.json(
+                { error: "Dados inválidos", details: parsed.error.flatten().fieldErrors },
+                { status: 400 }
+            );
         }
+
+        const { transcriptionId, force } = parsed.data;
 
         const supabase = await createServerClient();
 
@@ -24,17 +32,28 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
         }
 
-        // ── 1. Verificar se já existe resumo salvo ──────────────────────────
-        if (!force) {
-            const { data: transcription } = await supabase
-                .from("transcriptions")
-                .select("summary")
-                .eq("id", transcriptionId)
-                .single();
+        // ── Rate limit: 10 requisições por minuto por usuário ────────────
+        const rl = checkRateLimit(`summarize:${user.id}`, 10, 60_000);
+        if (!rl.allowed) {
+            return NextResponse.json(
+                { error: "Muitas requisições. Tente novamente em breve." },
+                { status: 429 }
+            );
+        }
 
-            if (transcription?.summary) {
-                return NextResponse.json({ summary: transcription.summary });
-            }
+        // ── 1. Verificar acesso e se já existe resumo salvo ──────────────
+        const { data: transcription } = await supabase
+            .from("transcriptions")
+            .select("id, summary, user_id")
+            .eq("id", transcriptionId)
+            .single();
+
+        if (!transcription) {
+            return NextResponse.json({ error: "Degravação não encontrada" }, { status: 404 });
+        }
+
+        if (!force && transcription.summary) {
+            return NextResponse.json({ summary: transcription.summary });
         }
 
         // ── 2. Buscar utterances para gerar o resumo ────────────────────────

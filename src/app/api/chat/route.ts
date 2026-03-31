@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase-server";
+import { checkRateLimit } from "@/lib/rate-limit";
+import { chatRequestSchema } from "@/lib/validations";
 
 /**
  * POST /api/chat
@@ -10,14 +12,17 @@ import { createServerClient } from "@/lib/supabase-server";
  */
 export async function POST(request: Request) {
     try {
-        const { messages, transcriptionId } = await request.json();
+        const body = await request.json();
+        const parsed = chatRequestSchema.safeParse(body);
 
-        if (!transcriptionId || !messages) {
+        if (!parsed.success) {
             return NextResponse.json(
-                { error: "transcriptionId e messages são obrigatórios" },
+                { error: "Dados inválidos", details: parsed.error.flatten().fieldErrors },
                 { status: 400 }
             );
         }
+
+        const { messages, transcriptionId } = parsed.data;
 
         const supabase = await createServerClient();
 
@@ -25,6 +30,26 @@ export async function POST(request: Request) {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) {
             return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
+        }
+
+        // ── Rate limit: 30 requisições por minuto por usuário ────────────
+        const rl = checkRateLimit(`chat:${user.id}`, 30, 60_000);
+        if (!rl.allowed) {
+            return NextResponse.json(
+                { error: "Muitas requisições. Tente novamente em breve." },
+                { status: 429 }
+            );
+        }
+
+        // Verificar que o usuário tem acesso à transcrição (dono ou compartilhada)
+        const { data: transcription } = await supabase
+            .from("transcriptions")
+            .select("id")
+            .eq("id", transcriptionId)
+            .single();
+
+        if (!transcription) {
+            return NextResponse.json({ error: "Degravação não encontrada" }, { status: 404 });
         }
 
         // Buscar utterances para contexto

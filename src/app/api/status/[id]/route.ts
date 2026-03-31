@@ -25,6 +25,7 @@ export async function GET(
             return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
         }
 
+        // RLS garante que só retorna transcrições do dono ou compartilhadas
         const { data, error } = await supabase
             .from("transcriptions")
             .select("status, progress, title, engine")

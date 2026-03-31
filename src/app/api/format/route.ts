@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase-server";
+import { formatRequestSchema } from "@/lib/validations";
 
 /**
  * POST /api/format
@@ -12,11 +13,17 @@ import { createServerClient } from "@/lib/supabase-server";
  */
 export async function POST(request: Request) {
     try {
-        const { transcriptionId } = await request.json();
+        const body = await request.json();
+        const parsed = formatRequestSchema.safeParse(body);
 
-        if (!transcriptionId) {
-            return NextResponse.json({ error: "transcriptionId é obrigatório" }, { status: 400 });
+        if (!parsed.success) {
+            return NextResponse.json(
+                { error: "Dados inválidos", details: parsed.error.flatten().fieldErrors },
+                { status: 400 }
+            );
         }
+
+        const { transcriptionId } = parsed.data;
 
         const supabase = await createServerClient();
 
@@ -44,7 +51,12 @@ export async function POST(request: Request) {
             .eq("id", transcriptionId)
             .single();
 
-        const glossary = transcription?.glossary ?? "";
+        // Sanitizar glossário para evitar prompt injection
+        const rawGlossary = transcription?.glossary ?? "";
+        const glossary = rawGlossary
+            .replace(/```/g, "")
+            .replace(/\n{3,}/g, "\n\n")
+            .slice(0, 2000);
 
         // 2. Preparar o input para o LLM
         const utterancesForLLM = utterances.map((u: {
