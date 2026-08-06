@@ -79,14 +79,44 @@ Para executar o projeto localmente, siga os passos abaixo.
     NEXT_PUBLIC_SUPABASE_URL=SUA_URL_DO_SUPABASE
     NEXT_PUBLIC_SUPABASE_ANON_KEY=SUA_CHAVE_ANON_DO_SUPABASE
 
-    # Deepgram
+    # Transcrição — Deepgram (motor "deepgram")
     DEEPGRAM_API_KEY=SUA_CHAVE_DE_API_DO_DEEPGRAM
 
-    # Azure AI
-    AZURE_API_KEY=SUA_CHAVE_DE_API_DA_AZURE
-    AZURE_ENDPOINT=SEU_ENDPOINT_DA_AZURE
-    AZURE_DEPLOYMENT_NAME=NOME_DO_SEU_DEPLOYMENT_NA_AZURE
+    # Transcrição — Google Chirp 3 (motor "google")
+    GOOGLE_CLOUD_API_KEY=SUA_CHAVE_DO_GOOGLE_CLOUD
+    GOOGLE_CLOUD_PROJECT_ID=SEU_PROJECT_ID
+
+    # Azure OpenAI — usado pelo motor "whisper" (transcrição) e, por padrão,
+    # como LLM de formatação/resumo/chat
+    AZURE_OPENAI_ENDPOINT=https://SEU-RECURSO.openai.azure.com
+    AZURE_OPENAI_API_KEY=SUA_CHAVE_DE_API_DA_AZURE
+    AZURE_OPENAI_DEPLOYMENT=gpt-5.2-chat   # opcional (padrão: gpt-5.2-chat)
     ```
+
+    #### Escolha do LLM (formatação, resumo e chat)
+
+    O provedor de LLM é selecionado pela variável `LLM_PROVIDER`. Se ela for
+    omitida, o padrão é `azure` — o comportamento anterior, sem quebrar nada.
+
+    Para usar o **Google Gemini**:
+
+    ```env
+    LLM_PROVIDER=gemini
+    GEMINI_API_KEY=SUA_CHAVE_DO_GOOGLE_AI_STUDIO
+
+    # Opcionais — só para fixar/alterar os modelos
+    GEMINI_MODEL=gemini-3.6-flash            # padrão
+    GEMINI_FALLBACK_MODEL=gemini-3.5-flash   # usado se o primário falhar
+    ```
+
+    - Se `GEMINI_API_KEY` não estiver definida, a aplicação reaproveita a
+      `GOOGLE_CLOUD_API_KEY` — desde que a API *Generative Language* esteja
+      habilitada no projeto do Google Cloud.
+    - O fallback automático `gemini-3.6-flash → gemini-3.5-flash` cobre contas
+      que ainda não têm acesso ao modelo mais novo.
+
+    > **Nota:** a transcrição (Whisper / Deepgram / Chirp 3) e o LLM são
+    > independentes. Você pode transcrever com Deepgram e formatar com Gemini.
 
 4.  **Execute o servidor de desenvolvimento:**
     ```bash
@@ -105,7 +135,8 @@ A estrutura de pastas segue as convenções do Next.js App Router.
 | `src/app/` | Contém a estrutura de rotas principal da aplicação. A lógica de UI para a página inicial está em `src/app/page.tsx`. |
 | `src/app/api/` | **(CRÍTICO)** Diretório onde residem as API routes do Next.js. Contém a lógica de backend para se comunicar com Deepgram e Azure. |
 | `src/components/` | Contém os componentes React reutilizáveis da aplicação (botões, cards, etc.), seguindo a filosofia do Shadcn UI. |
-| `src/lib/` | Módulos de utilidades e configurações. `src/lib/utils.ts` provavelmente contém funções auxiliares, e `src/lib/ai.ts` deve conter a configuração e a lógica para interagir com o Azure AI SDK. |
+| `src/lib/llm.ts` | **(CRÍTICO)** Camada de abstração do LLM. Normaliza Azure OpenAI e Google Gemini atrás de `llmComplete()` / `llmStream()`. Único lugar que conhece os detalhes de cada provedor. |
+| `src/lib/` | Módulos de utilidades e configurações. `src/lib/utils.ts` contém funções auxiliares; `transcribe-*.ts` implementam os motores de transcrição (Whisper, Deepgram, Chirp 3). |
 | `src/hooks/` | **(CRÍTICO)** Contém os hooks React customizados, como `useRecorder`, que encapsula a complexidade da gravação, processamento e envio de áudio. |
 | `public/` | Armazena arquivos estáticos, como imagens e ícones, que são servidos diretamente pelo servidor. |
 | `supabase/` | Contém migrações e configurações do banco de dados Supabase, permitindo o versionamento do schema do banco. |

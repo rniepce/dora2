@@ -1,7 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { llmComplete, getProviderLabel } from "./llm";
 
 /**
- * Executa a formatação das utterances usando o LLM (Azure GPT-5.2).
+ * Executa a formatação das utterances usando o LLM configurado
+ * (Azure GPT-5.2 ou Google Gemini — ver `LLM_PROVIDER` em `lib/llm.ts`).
  * Recebe Supabase client já autenticado do process route.
  */
 export async function runFormatting(
@@ -47,9 +49,7 @@ export async function runFormatting(
         batches.push(utterancesForLLM.slice(i, i + BATCH_SIZE));
     }
 
-    const endpoint = process.env.AZURE_OPENAI_ENDPOINT!;
-    const apiKey = process.env.AZURE_OPENAI_API_KEY!;
-    const chatUrl = `${endpoint}/openai/deployments/gpt-5.2-chat/chat/completions?api-version=2024-06-01`;
+    console.log(`[Format] LLM: ${getProviderLabel()} — ${batches.length} batch(es)`);
 
     const updateProgress = async (progress: number, status?: string) => {
         const update: Record<string, unknown> = { progress, updated_at: new Date().toISOString() };
@@ -64,29 +64,19 @@ export async function runFormatting(
         const systemPrompt = buildSystemPrompt(glossary);
         const userPrompt = JSON.stringify(batch, null, 2);
 
-        const llmRes = await fetch(chatUrl, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "api-key": apiKey,
-            },
-            body: JSON.stringify({
-                messages: [
-                    { role: "system", content: systemPrompt },
-                    { role: "user", content: userPrompt },
-                ],
-                max_completion_tokens: 8000,
-            }),
-        });
-
-        if (!llmRes.ok) {
-            const errText = await llmRes.text();
-            console.error("[Format] LLM API error:", errText);
+        // Falha de um batch não aborta o pipeline — segue para o próximo,
+        // preservando o comportamento original (`continue` no erro).
+        let llmResponse: string;
+        try {
+            llmResponse = await llmComplete({
+                system: systemPrompt,
+                messages: [{ role: "user", content: userPrompt }],
+                maxTokens: 8000,
+            });
+        } catch (err) {
+            console.error("[Format] LLM API error:", err);
             continue;
         }
-
-        const llmData = await llmRes.json();
-        const llmResponse = llmData.choices?.[0]?.message?.content ?? "";
 
         const parsed = parseLLMResponse(llmResponse);
         if (parsed) {

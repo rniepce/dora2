@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase-server";
+import { llmComplete } from "@/lib/llm";
 
 /**
  * POST /api/summarize
  * Body: { transcriptionId: string, force?: boolean }
  *
- * Retorna o resumo salvo ou gera um novo usando Azure GPT 5.2.
+ * Retorna o resumo salvo ou gera um novo usando o LLM configurado
+ * (Azure GPT-5.2 ou Google Gemini — ver `LLM_PROVIDER` em `lib/llm.ts`).
  * Quando `force: true`, sempre regenera via LLM e sobrescreve o cache.
  */
 export async function POST(request: Request) {
@@ -60,10 +62,6 @@ export async function POST(request: Request) {
         }
 
         // ── 3. Chamar o LLM ────────────────────────────────────────────────
-        const endpoint = process.env.AZURE_OPENAI_ENDPOINT!;
-        const apiKey = process.env.AZURE_OPENAI_API_KEY!;
-        const chatUrl = `${endpoint}/openai/deployments/gpt-5.2-chat/chat/completions?api-version=2024-06-01`;
-
         const systemPrompt = `Você é um assistente jurídico especializado em audiências judiciais brasileiras do TJMG.
 
 Analise a transcrição abaixo de uma audiência judicial e produza um resumo estruturado contendo:
@@ -79,32 +77,24 @@ Seja objetivo e direto. Use linguagem jurídica adequada, mas acessível. O resu
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 120000);
 
-        const llmRes = await fetch(chatUrl, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "api-key": apiKey,
-            },
-            body: JSON.stringify({
+        let summary: string;
+        try {
+            summary = await llmComplete({
+                system: systemPrompt,
                 messages: [
-                    { role: "system", content: systemPrompt },
                     { role: "user", content: `Transcrição da audiência:\n\n${transcriptText}` },
                 ],
-                max_completion_tokens: 2000,
-            }),
-            signal: controller.signal,
-        });
-
-        clearTimeout(timeoutId);
-
-        if (!llmRes.ok) {
-            const errText = await llmRes.text();
-            console.error("Summarize LLM error:", errText);
+                maxTokens: 2000,
+                signal: controller.signal,
+            });
+        } catch (err) {
+            console.error("Summarize LLM error:", err);
             return NextResponse.json({ error: "Erro ao gerar resumo" }, { status: 500 });
+        } finally {
+            clearTimeout(timeoutId);
         }
 
-        const llmData = await llmRes.json();
-        const summary = llmData.choices?.[0]?.message?.content ?? "Não foi possível gerar o resumo.";
+        if (!summary) summary = "Não foi possível gerar o resumo.";
 
         // ── 4. Salvar o resumo no banco ─────────────────────────────────────
         const { error: updateError } = await supabase

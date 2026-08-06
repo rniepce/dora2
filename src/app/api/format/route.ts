@@ -1,12 +1,14 @@
 import { NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase-server";
+import { llmComplete } from "@/lib/llm";
 
 /**
  * POST /api/format
  * Body: { transcriptionId: string }
  *
  * 1. Busca as utterances da degravação
- * 2. Envia blocos para o LLM (Azure gpt-4.1-mini) com system prompt jurídico
+ * 2. Envia blocos para o LLM configurado (Azure ou Gemini — ver `LLM_PROVIDER`
+ *    em `lib/llm.ts`) com system prompt jurídico
  * 3. Atualiza os speaker_labels e textos corrigidos
  * 4. Atualiza o status para "completed"
  */
@@ -66,10 +68,6 @@ export async function POST(request: Request) {
             batches.push(utterancesForLLM.slice(i, i + BATCH_SIZE));
         }
 
-        const endpoint = process.env.AZURE_OPENAI_ENDPOINT!;
-        const apiKey = process.env.AZURE_OPENAI_API_KEY!;
-        const chatUrl = `${endpoint}/openai/deployments/gpt-5.2-chat/chat/completions?api-version=2024-06-01`;
-
         // Helper para atualizar progresso
         const updateProgress = async (progress: number, status?: string) => {
             const update: Record<string, unknown> = { progress, updated_at: new Date().toISOString() };
@@ -84,29 +82,17 @@ export async function POST(request: Request) {
             const systemPrompt = buildSystemPrompt(glossary);
             const userPrompt = JSON.stringify(batch, null, 2);
 
-            const llmRes = await fetch(chatUrl, {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    "api-key": apiKey,
-                },
-                body: JSON.stringify({
-                    messages: [
-                        { role: "system", content: systemPrompt },
-                        { role: "user", content: userPrompt },
-                    ],
-                    max_completion_tokens: 8000,
-                }),
-            });
-
-            if (!llmRes.ok) {
-                const errText = await llmRes.text();
-                console.error("LLM API error:", errText);
+            let llmResponse: string;
+            try {
+                llmResponse = await llmComplete({
+                    system: systemPrompt,
+                    messages: [{ role: "user", content: userPrompt }],
+                    maxTokens: 8000,
+                });
+            } catch (err) {
+                console.error("LLM API error:", err);
                 continue;
             }
-
-            const llmData = await llmRes.json();
-            const llmResponse = llmData.choices?.[0]?.message?.content ?? "";
 
             // Parsear a resposta do LLM
             const parsed = parseLLMResponse(llmResponse);
