@@ -7,6 +7,61 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 const VIDEO_EXTENSIONS = new Set(["mp4", "mkv", "avi", "mov", "webm", "flv", "wmv"]);
 
+// ─── Pós-processamento: artigo indefinido virando algarismo ──────────────────
+// O smart_format do Deepgram converte números por extenso em algarismos e não
+// distingue o numeral "um" do artigo: "só um pouquinho" vira "só 1 pouquinho".
+// Desligar smart_format resolveria isso, mas passa a escrever todos os valores
+// e datas por extenso — pior para degravação. Corrigimos depois, pelo gênero da
+// palavra seguinte. Medido em audiência real: WER 15,9% → 14,8%.
+
+/** Terminam em -a mas são masculinos. */
+const MASCULINOS_EM_A = new Set([
+    "dia", "problema", "sistema", "mapa", "programa", "tema", "esquema",
+    "telefonema", "dilema", "clima", "dogma", "dia",
+]);
+
+/** Terminam em -ão mas são femininos (os em -ção/-são já caem no sufixo). */
+const FEMININOS_EM_AO = new Set(["questão", "razão", "mão", "ocasião"]);
+
+const SUFIXOS_FEMININOS = /(ção|são|gem|dade|tude|ice)$/;
+
+/** Decide "um" ou "uma" pelo gênero provável da palavra seguinte. */
+function artigoIndefinido(proxima: string): "um" | "uma" {
+    const p = proxima.toLowerCase().replace(/[^\p{L}]/gu, "");
+    if (!p) return "um";
+    if (MASCULINOS_EM_A.has(p)) return "um";
+    if (FEMININOS_EM_AO.has(p) || SUFIXOS_FEMININOS.test(p)) return "uma";
+    return /[aã]$/.test(p) ? "uma" : "um";
+}
+
+/**
+ * Devolve o "1" isolado à forma de artigo. Só atua quando há uma palavra
+ * logo em seguida, então sequências numéricas ("10 38 0 7", "403 e 26",
+ * "10 dias") ficam intactas.
+ */
+function corrigirArtigoNoTexto(texto: string): string {
+    return texto.replace(
+        /(^|[\s(])1(\s+)(\p{L}+)/gu,
+        (_m, antes: string, espaco: string, proxima: string) =>
+            `${antes}${artigoIndefinido(proxima)}${espaco}${proxima}`
+    );
+}
+
+/**
+ * Mesma correção no array de words. Precisa acompanhar o texto: o editor
+ * destaca palavra a palavra a partir daqui (ver src/hooks/use-time-sync.ts),
+ * e divergir do transcript dessincronizaria o destaque.
+ */
+function corrigirArtigoNasWords<T extends { word: string }>(words: T[]): T[] {
+    return words.map((w, i) => {
+        if (w.word !== "1") return w;
+        const proxima = words[i + 1]?.word ?? "";
+        // sem palavra seguinte, ou seguida de outro número: é numeral mesmo
+        if (!proxima || /^\d/.test(proxima)) return w;
+        return { ...w, word: artigoIndefinido(proxima) };
+    });
+}
+
 export async function runDeepgramTranscription(
     transcriptionId: string,
     supabase: SupabaseClient
@@ -128,7 +183,7 @@ export async function runDeepgramTranscription(
             await supabase.from("utterances").insert({
                 transcription_id: transcriptionId,
                 speaker_label: "SPEAKER_00",
-                text: transcript.trim(),
+                text: corrigirArtigoNoTexto(transcript.trim()),
                 start_time: 0,
                 end_time: 0,
                 words: null,
@@ -139,11 +194,11 @@ export async function runDeepgramTranscription(
         const utterancesToInsert = dgUtterances.map((utt, idx) => ({
             transcription_id: transcriptionId,
             speaker_label: `SPEAKER_${String(utt.speaker ?? 0).padStart(2, "0")}`,
-            text: utt.transcript.trim(),
+            text: corrigirArtigoNoTexto(utt.transcript.trim()),
             start_time: utt.start,
             end_time: utt.end,
             words: utt.words
-                ? utt.words.map((w) => ({
+                ? corrigirArtigoNasWords(utt.words).map((w) => ({
                     word: w.word,
                     start: w.start,
                     end: w.end,
