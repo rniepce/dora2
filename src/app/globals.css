@@ -4,43 +4,55 @@
 @custom-variant dark (&:is(.dark *));
 
 /*
- * TJMG Light Theme — Tribunal de Justiça de Minas Gerais
- * Burgundy Red + Navy Blue + White
+ * Identidade gráfica TJMG — alinhada ao Assistente TJMG
+ * Base monocromática (papel quente + tinta quase preta), vermelho TJMG
+ * usado apenas como acento. Sem gradientes, sem glassmorphism.
  */
 @theme inline {
-  --color-background: oklch(0.985 0.002 247);
-  --color-foreground: oklch(0.22 0.03 256);
+  /* Papel / superfícies */
+  --color-background: oklch(0.963 0.0025 90);
+  --color-foreground: oklch(0.215 0.004 90);
   --color-card: oklch(1 0 0);
-  --color-card-foreground: oklch(0.22 0.03 256);
+  --color-card-foreground: oklch(0.215 0.004 90);
   --color-popover: oklch(1 0 0);
-  --color-popover-foreground: oklch(0.22 0.03 256);
-  --color-primary: oklch(0.35 0.12 15);
-  --color-primary-foreground: oklch(0.98 0.005 15);
-  --color-secondary: oklch(0.95 0.01 250);
-  --color-secondary-foreground: oklch(0.25 0.04 256);
-  --color-muted: oklch(0.94 0.01 250);
-  --color-muted-foreground: oklch(0.5 0.02 256);
-  --color-accent: oklch(0.93 0.02 250);
-  --color-accent-foreground: oklch(0.25 0.04 256);
+  --color-popover-foreground: oklch(0.215 0.004 90);
+
+  /* Acento TJMG — vermelho do triângulo */
+  --color-primary: oklch(0.53 0.192 27);
+  --color-primary-foreground: oklch(1 0 0);
+
+  /* Rosa esmaecido — botão de ação principal do Assistente */
+  --color-accent: oklch(0.66 0.068 20);
+  --color-accent-foreground: oklch(1 0 0);
+
+  /* Neutros */
+  --color-secondary: oklch(0.955 0.003 90);
+  --color-secondary-foreground: oklch(0.28 0.004 90);
+  --color-muted: oklch(0.962 0.003 90);
+  --color-muted-foreground: oklch(0.605 0.005 90);
   --color-destructive: oklch(0.55 0.2 27);
-  --color-border: oklch(0.88 0.015 250);
-  --color-input: oklch(0.88 0.015 250);
-  --color-ring: oklch(0.35 0.12 15);
-  --color-chart-1: oklch(0.35 0.12 15);
-  --color-chart-2: oklch(0.35 0.08 256);
-  --color-chart-3: oklch(0.65 0.15 50);
-  --color-chart-4: oklch(0.7 0.1 160);
-  --color-chart-5: oklch(0.6 0.12 300);
-  --color-sidebar: oklch(0.97 0.01 250);
-  --color-sidebar-foreground: oklch(0.22 0.03 256);
-  --color-sidebar-primary: oklch(0.35 0.12 15);
-  --color-sidebar-primary-foreground: oklch(0.98 0.005 15);
-  --color-sidebar-accent: oklch(0.93 0.02 250);
-  --color-sidebar-accent-foreground: oklch(0.25 0.04 256);
-  --color-sidebar-border: oklch(0.88 0.015 250);
-  --color-sidebar-ring: oklch(0.35 0.12 15);
-  --radius: 0.625rem;
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --color-border: oklch(0.918 0.003 90);
+  --color-input: oklch(0.918 0.003 90);
+  --color-ring: oklch(0.53 0.192 27);
+
+  --color-chart-1: oklch(0.53 0.192 27);
+  --color-chart-2: oklch(0.42 0.02 90);
+  --color-chart-3: oklch(0.66 0.068 20);
+  --color-chart-4: oklch(0.75 0.01 90);
+  --color-chart-5: oklch(0.86 0.006 90);
+
+  /* Barra lateral — papel um tom acima do branco */
+  --color-sidebar: oklch(0.982 0.0025 90);
+  --color-sidebar-foreground: oklch(0.215 0.004 90);
+  --color-sidebar-primary: oklch(0.53 0.192 27);
+  --color-sidebar-primary-foreground: oklch(1 0 0);
+  --color-sidebar-accent: oklch(0.945 0.003 90);
+  --color-sidebar-accent-foreground: oklch(0.215 0.004 90);
+  --color-sidebar-border: oklch(0.918 0.003 90);
+  --color-sidebar-ring: oklch(0.53 0.192 27);
+
+  --radius: 0.875rem;
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
 }
 
 /* ─── Global Styles ───────────────────────────────────────────────────────── */
@@ -67,6 +79,13 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 
+/* Títulos do Assistente: pesados, tracking fechado */
+.display-title {
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  line-height: 1.05;
+}
+
 /* ─── Mobile: prevent auto-zoom on input focus (iOS Safari) ──────────────── */
 
 @media screen and (max-width: 767px) {
@@ -90,27 +109,46 @@ body {
   }
 }
 
-/* ─── TJMG Gradients ──────────────────────────────────────────────────────── */
+/* ─── Superfícies ─────────────────────────────────────────────────────────── */
+
+/* Contêiner flutuante do app (canto arredondado sobre o papel) */
+.app-shell {
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  border-radius: 1.5rem;
+}
+
+/* Chip de ação — pílula branca com borda fina */
+.chip {
+  @apply inline-flex items-center gap-2 rounded-full border border-border bg-card px-5 py-2.5 text-sm font-semibold text-foreground transition-colors;
+}
+
+.chip:hover {
+  @apply border-foreground/25 bg-secondary;
+}
+
+/* ─── Compat: classes legadas achatadas (sem gradiente) ───────────────────── */
 
 .gradient-primary {
-  background: linear-gradient(135deg, #7a1520 0%, #9b1b30 50%, #7a1520 100%);
+  background: oklch(0.53 0.192 27);
 }
 
 .gradient-navy {
-  background: linear-gradient(135deg, #1B3A5C 0%, #264d73 50%, #1B3A5C 100%);
+  background: oklch(0.32 0.012 90);
 }
 
 .gradient-bg {
-  background: linear-gradient(180deg, #f8f9fc 0%, #f0f2f8 50%, #e8ecf4 100%);
+  background: var(--color-background);
 }
 
-/* ─── Glassmorphism (light) ─────────────────────────────────────────────── */
+.glassmorphism,
+.glass-card {
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+}
 
-.glassmorphism {
-  background: rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(122, 21, 32, 0.08);
+.text-gradient {
+  color: var(--color-foreground);
 }
 
 /* ─── Scrollbar ──────────────────────────────────────────────────────────── */
@@ -124,17 +162,17 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(27, 58, 92, 0.2);
+  background: oklch(0.215 0.004 90 / 0.15);
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(27, 58, 92, 0.35);
+  background: oklch(0.215 0.004 90 / 0.3);
 }
 
 /* ─── Selection ──────────────────────────────────────────────────────────── */
 
 ::selection {
-  background: rgba(122, 21, 32, 0.15);
-  color: #4a0a14;
+  background: oklch(0.53 0.192 27 / 0.14);
+  color: oklch(0.3 0.12 27);
 }

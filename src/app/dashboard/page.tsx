@@ -1,8 +1,7 @@
 import { createServerClient } from "@/lib/supabase-server";
 import { TranscriptionCard } from "@/components/transcription-card";
 import { EmptyState } from "@/components/empty-state";
-import { Button } from "@/components/ui/button";
-import { Plus, Users, Search, ChevronDown } from "lucide-react";
+import { Plus, Search, ChevronDown } from "lucide-react";
 import Link from "next/link";
 import { Input } from "@/components/ui/input";
 import type { Transcription } from "@/lib/types";
@@ -91,82 +90,106 @@ export default async function DashboardPage() {
 
     const items = transcriptions ?? [];
 
+    const rawName = user!.email?.split("@")[0] ?? "Usuário";
+    const firstName = rawName.split(/[.\-_]/)[0];
+    const displayName = firstName.charAt(0).toUpperCase() + firstName.slice(1);
+
     return (
         <div>
-            {/* ─── Header & Filters ────────────────────────────────────── */}
-            <div className="mb-6 flex flex-col gap-6">
-                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+            {/* ─── Boas-vindas ─────────────────────────────────────────── */}
+            <section className="flex flex-col items-center px-2 pb-14 pt-16 text-center sm:pt-24">
+                <h1 className="display-title text-[38px] text-foreground sm:text-[52px]">
+                    Bem-vindo, {displayName}.
+                </h1>
+                <p className="mt-4 text-lg text-muted-foreground sm:text-xl">
+                    O que você deseja fazer?
+                </p>
+
+                <div className="mt-10 flex flex-wrap justify-center gap-3">
+                    <Link href="/dashboard/new" className="chip">
+                        Nova degravação
+                    </Link>
+                    <Link href="#degravacoes" className="chip">
+                        Minhas degravações
+                    </Link>
+                    {sharedTranscriptions.length > 0 && (
+                        <Link href="#compartilhadas" className="chip">
+                            Compartilhadas comigo
+                        </Link>
+                    )}
+                </div>
+            </section>
+
+            {/* ─── Minhas degravações ──────────────────────────────────── */}
+            <section id="degravacoes" className="scroll-mt-6">
+                <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
                     <div>
-                        <h1 className="text-3xl font-bold tracking-tight text-foreground">
+                        <h2 className="text-2xl font-bold tracking-tight text-foreground">
                             Degravações
-                        </h1>
-                        <p className="mt-1 text-muted-foreground">
+                        </h2>
+                        <p className="mt-1 text-[15px] text-muted-foreground">
                             Visualização geral de todas as transcrições.
                         </p>
                     </div>
 
-                    <Link href="/dashboard/new">
-                        <Button className="bg-[#841b2d] hover:bg-[#6b1624] text-white shadow-sm font-medium w-full sm:w-auto">
-                            <Plus className="mr-2 h-4 w-4" />
-                            Nova Degravação
-                        </Button>
-                    </Link>
-                </div>
-                
-                <div className="flex justify-end items-center gap-3">
-                    <div className="relative w-full sm:w-[300px]">
-                        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                        <Input placeholder="Busca..." className="pl-9 bg-white shadow-sm border-border rounded-lg" />
+                    <div className="flex items-center gap-2">
+                        <div className="relative w-full sm:w-[260px]">
+                            <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                            <Input placeholder="Busca..." className="h-10 rounded-full pl-10" />
+                        </div>
+                        <button
+                            type="button"
+                            className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-full border border-border bg-card px-4 text-sm font-medium text-foreground transition-colors hover:bg-secondary"
+                        >
+                            Filtros
+                            <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                        </button>
                     </div>
-                    <Button variant="outline" className="bg-white shadow-sm border-border rounded-lg gap-2 text-foreground font-medium">
-                        Filtres <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                    </Button>
                 </div>
-            </div>
 
-            {items.length === 0 ? (
-                <EmptyState
-                    title="Nenhuma degravação"
-                    description="Comece enviando um áudio ou vídeo de audiência."
-                >
-                    <Link href="/dashboard/new">
-                        <Button className="gradient-primary font-semibold text-white shadow-md">
-                            <Plus className="mr-2 h-4 w-4" />
-                            Nova Degravação
-                        </Button>
-                    </Link>
-                </EmptyState>
-            ) : (
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3">
-                    {items.map((t) => (
-                        <TranscriptionCard key={t.id} transcription={t} />
-                    ))}
-                </div>
-            )}
+                {items.length === 0 ? (
+                    <EmptyState
+                        title="Nenhuma degravação"
+                        description="Comece enviando um áudio ou vídeo de audiência."
+                    >
+                        <Link
+                            href="/dashboard/new"
+                            className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+                        >
+                            <Plus className="h-4 w-4" />
+                            Nova degravação
+                        </Link>
+                    </EmptyState>
+                ) : (
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                        {items.map((t) => (
+                            <TranscriptionCard key={t.id} transcription={t} />
+                        ))}
+                    </div>
+                )}
+            </section>
 
             {/* ─── Compartilhadas Comigo ──────────────────────────────── */}
             {sharedTranscriptions.length > 0 && (
-                <div className="mt-12">
-                    <div className="mb-6 flex items-center gap-2">
-                        <div className="flex h-8 w-8 items-center justify-center rounded-lg gradient-navy shadow-sm">
-                            <Users className="h-4 w-4 text-white" />
-                        </div>
-                        <div>
-                            <h2 className="text-xl font-bold tracking-tight text-foreground">
-                                Compartilhadas comigo
-                            </h2>
-                            <p className="text-sm text-muted-foreground">
-                                {sharedTranscriptions.length} {sharedTranscriptions.length !== 1 ? "degravações recebidas" : "degravação recebida"}
-                            </p>
-                        </div>
+                <section id="compartilhadas" className="mt-14 scroll-mt-6">
+                    <div className="mb-6">
+                        <h2 className="text-2xl font-bold tracking-tight text-foreground">
+                            Compartilhadas comigo
+                        </h2>
+                        <p className="mt-1 text-[15px] text-muted-foreground">
+                            {sharedTranscriptions.length}{" "}
+                            {sharedTranscriptions.length !== 1
+                                ? "degravações recebidas"
+                                : "degravação recebida"}
+                        </p>
                     </div>
 
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3">
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
                         {sharedTranscriptions.map((t) => (
                             <TranscriptionCard key={`shared-${t.id}`} transcription={t} />
                         ))}
                     </div>
-                </div>
+                </section>
             )}
         </div>
     );

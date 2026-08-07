@@ -234,14 +234,14 @@ export function EditorClient({ transcription, utterances }: EditorClientProps) {
                             variant="outline"
                             size="sm"
                             onClick={() => router.push("/dashboard")}
-                            className="bg-red-50 text-[#841b2d] border-red-100 hover:bg-red-100 px-3 font-medium h-9"
+                            className="bg-secondary text-foreground border-border hover:bg-secondary/70 px-3 font-medium h-9"
                         >
                             <ArrowLeft className="h-4 w-4 mr-1.5" />
                             Voltar
                         </Button>
 
                         <div className="flex items-center gap-2.5">
-                            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#841b2d] shadow-sm">
+                            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary shadow-sm">
                                 <Scale className="h-4 w-4 text-white" />
                             </div>
                             <h1 className="text-sm font-bold text-foreground">
@@ -363,7 +363,7 @@ export function EditorClient({ transcription, utterances }: EditorClientProps) {
                             key={tab.key}
                             onClick={() => setActiveTab(tab.key)}
                             className={`flex flex-1 items-center justify-center gap-1.5 py-3 text-xs font-semibold transition-colors ${activeTab === tab.key
-                                ? "border-b-2 border-[#841b2d] text-[#841b2d]"
+                                ? "border-b-2 border-primary text-primary"
                                 : "text-muted-foreground"
                                 }`}
                         >

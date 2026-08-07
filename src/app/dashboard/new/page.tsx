@@ -271,10 +271,10 @@ export default function NewTranscriptionPage() {
             </div>
 
             {/* Main Card */}
-            <Card className="border-border bg-white shadow-sm overflow-hidden p-0 rounded-2xl w-full mx-auto sm:max-w-2xl">
+            <Card className="border-border bg-card overflow-hidden p-0 rounded-2xl w-full mx-auto sm:max-w-2xl">
                 {/* Progress Tabs (Visual Only for Mockup match) */}
                 <div className="flex border-b pt-6 px-6">
-                    <div className="flex-1 text-center pb-3 border-b-[3px] border-[#841b2d] text-foreground font-semibold -mb-[2px] z-10 transition-colors">
+                    <div className="flex-1 text-center pb-3 border-b-[3px] border-foreground text-foreground font-semibold -mb-[2px] z-10 transition-colors">
                         1. Detalhes
                     </div>
                     <div className="flex-1 text-center pb-3 text-muted-foreground font-medium border-b-[3px] border-transparent -mb-[2px] z-10">
@@ -286,7 +286,7 @@ export default function NewTranscriptionPage() {
                 </div>
 
                 <CardHeader className="pt-8 pb-4">
-                    <CardTitle className="text-3xl font-bold">Nova Degravação</CardTitle>
+                    <CardTitle className="display-title text-3xl">Nova degravação</CardTitle>
                     <CardDescription className="text-sm mt-1">
                         Detalhes da Audiência
                     </CardDescription>
@@ -294,7 +294,7 @@ export default function NewTranscriptionPage() {
                 <CardContent className="space-y-6">
                     {/* Progress Card (real-time) */}
                     {(isProcessing || isDone || isError) && (
-                        <div className="mb-6 border rounded-xl overflow-hidden bg-gray-50/50">
+                        <div className="mb-6 border rounded-2xl overflow-hidden bg-secondary/40">
                             <div className="flex items-center justify-between p-4 pb-2">
                                 <span className="flex items-center gap-2 text-sm font-medium">
                                     {isDone ? (
@@ -328,8 +328,8 @@ export default function NewTranscriptionPage() {
                                 </div>
                             </div>
                             {isError && errorMsg && (
-                                <div className="border-t border-red-100 px-4 py-3 bg-red-50/50">
-                                    <p className="text-sm text-red-600 font-medium">{errorMsg}</p>
+                                <div className="border-t border-border px-4 py-3 bg-primary/5">
+                                    <p className="text-sm text-primary font-medium">{errorMsg}</p>
                                 </div>
                             )}
                         </div>
@@ -344,7 +344,7 @@ export default function NewTranscriptionPage() {
                             onChange={(e) => setTitle(e.target.value)}
                             placeholder="Ex: 12345-67.2024.8.13.0001"
                             disabled={isProcessing || isDone}
-                            className="bg-gray-50/50 border-gray-200 shadow-none h-11"
+                            className="bg-secondary/50"
                         />
                     </div>
 
@@ -359,7 +359,7 @@ export default function NewTranscriptionPage() {
                             onChange={(e) => setGlossary(e.target.value)}
                             placeholder="Nomes do juiz, partes, testemunhas, termos técnicos..."
                             disabled={isProcessing || isDone}
-                            className="bg-gray-50/50 border-gray-200 shadow-none h-11"
+                            className="bg-secondary/50"
                         />
                     </div>
 
@@ -372,11 +372,11 @@ export default function NewTranscriptionPage() {
                                 onClick={() => setEngine("whisper")}
                                 disabled={isProcessing || isDone}
                                 className={`flex flex-col items-center justify-center gap-1.5 rounded-xl border p-4 text-center transition-all min-h-[90px] ${engine === "whisper"
-                                    ? "border-[#841b2d] bg-red-50/30"
-                                    : "border-border hover:border-[#841b2d]/30 hover:bg-gray-50"
+                                    ? "border-foreground/45 bg-secondary"
+                                    : "border-border hover:border-foreground/20 hover:bg-secondary/60"
                                     }`}
                             >
-                                <Mic className={`h-5 w-5 ${engine === "whisper" ? "text-[#841b2d]" : "text-muted-foreground"}`} />
+                                <Mic className={`h-5 w-5 ${engine === "whisper" ? "text-primary" : "text-muted-foreground"}`} />
                                 <div className="space-y-0.5">
                                     <p className={`text-[13px] font-semibold ${engine === "whisper" ? "text-foreground" : "text-muted-foreground"}`}>
                                         Azure Whisper
@@ -392,11 +392,11 @@ export default function NewTranscriptionPage() {
                                 onClick={() => setEngine("deepgram")}
                                 disabled={isProcessing || isDone}
                                 className={`flex flex-col items-center justify-center gap-1.5 rounded-xl border p-4 text-center transition-all min-h-[90px] ${engine === "deepgram"
-                                    ? "border-[#841b2d] bg-red-50/30"
-                                    : "border-border hover:border-[#841b2d]/30 hover:bg-gray-50"
+                                    ? "border-foreground/45 bg-secondary"
+                                    : "border-border hover:border-foreground/20 hover:bg-secondary/60"
                                     }`}
                             >
-                                <AudioLines className={`h-5 w-5 ${engine === "deepgram" ? "text-[#841b2d]" : "text-muted-foreground"}`} />
+                                <AudioLines className={`h-5 w-5 ${engine === "deepgram" ? "text-primary" : "text-muted-foreground"}`} />
                                 <div className="space-y-0.5">
                                     <p className={`text-[13px] font-semibold ${engine === "deepgram" ? "text-foreground" : "text-muted-foreground"}`}>
                                         Deepgram Nova-3
@@ -412,11 +412,11 @@ export default function NewTranscriptionPage() {
                                 onClick={() => setEngine("google")}
                                 disabled={isProcessing || isDone}
                                 className={`flex flex-col items-center justify-center gap-1.5 rounded-xl border p-4 text-center transition-all min-h-[90px] ${engine === "google"
-                                    ? "border-[#841b2d] bg-red-50/30"
-                                    : "border-border hover:border-[#841b2d]/30 hover:bg-gray-50"
+                                    ? "border-foreground/45 bg-secondary"
+                                    : "border-border hover:border-foreground/20 hover:bg-secondary/60"
                                     }`}
                             >
-                                <Globe className={`h-5 w-5 ${engine === "google" ? "text-[#841b2d]" : "text-muted-foreground"}`} />
+                                <Globe className={`h-5 w-5 ${engine === "google" ? "text-primary" : "text-muted-foreground"}`} />
                                 <div className="space-y-0.5">
                                     <p className={`text-[13px] font-semibold ${engine === "google" ? "text-foreground" : "text-muted-foreground"}`}>
                                         Google Chirp 3
@@ -433,12 +433,10 @@ export default function NewTranscriptionPage() {
                     <div className="pt-2">
                         {!selectedFile ? (
                             <div
-                                className="group cursor-pointer rounded-xl border-2 border-dashed border-gray-300 p-8 sm:p-12 text-center transition-all hover:border-[#841b2d]/40 hover:bg-red-50/10"
+                                className="group cursor-pointer rounded-2xl border border-dashed border-border p-8 sm:p-12 text-center transition-colors hover:border-foreground/25 hover:bg-secondary/40"
                                 onClick={() => fileInputRef.current?.click()}
                             >
-                                <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-red-50 text-[#841b2d] transition-colors group-hover:bg-red-100">
-                                    <Upload className="h-5 w-5" />
-                                </div>
+                                <Upload className="mx-auto mb-3 h-7 w-7 stroke-[1.4] text-muted-foreground" />
                                 <p className="font-semibold text-foreground text-sm">
                                     Arraste e solte seu arquivo aqui
                                 </p>
@@ -450,8 +448,8 @@ export default function NewTranscriptionPage() {
                                 </p>
                             </div>
                         ) : (
-                            <div className="flex items-center gap-3 rounded-xl border border-gray-200 bg-gray-50 p-4">
-                                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-red-50 text-[#841b2d]">
+                            <div className="flex items-center gap-3 rounded-2xl border border-border bg-secondary/50 p-4">
+                                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-card text-foreground">
                                     {isAudioFile(selectedFile.name) ? (
                                         <Music className="h-5 w-5" />
                                     ) : (
@@ -484,7 +482,7 @@ export default function NewTranscriptionPage() {
                     <div className="flex gap-4 pt-4 border-t mt-4">
                         <Button
                             variant="outline"
-                            className="flex-1 py-6 h-12 font-medium bg-white text-foreground"
+                            className="h-12 flex-1"
                             onClick={() => router.push("/dashboard")}
                             disabled={isProcessing || isDone}
                         >
@@ -494,7 +492,7 @@ export default function NewTranscriptionPage() {
                             <Button
                                 onClick={handleSubmit}
                                 disabled={!title.trim() || !selectedFile || isProcessing || isDone}
-                                className="flex-1 py-6 h-12 font-semibold bg-[#841b2d] hover:bg-[#6b1624] text-white shadow-sm"
+                                className="h-12 flex-1"
                             >
                                 {isProcessing ? (
                                     <>
@@ -513,7 +511,7 @@ export default function NewTranscriptionPage() {
                         ) : (
                             <Button
                                 variant="outline"
-                                className="flex-1 py-6 h-12 font-semibold border-red-200 text-red-600 hover:bg-red-50"
+                                className="h-12 flex-1 border-primary/30 text-primary hover:bg-primary/5"
                                 onClick={() => {
                                     setIsError(false);
                                     setIsProcessing(false);
