@@ -167,7 +167,6 @@ export default function NewTranscriptionPage() {
             const filePath = `${result.id}/media.${ext}`;
             const bucketName = "media";
 
-            const { data: { session } } = await supabase.auth.getSession();
             const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
             const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
@@ -176,7 +175,7 @@ export default function NewTranscriptionPage() {
                     endpoint: `${supabaseUrl}/storage/v1/upload/resumable`,
                     retryDelays: [0, 1000, 3000, 5000],
                     headers: {
-                        authorization: `Bearer ${session?.access_token ?? supabaseKey}`,
+                        authorization: `Bearer ${supabaseKey}`,
                         "x-upsert": "true",
                     },
                     uploadDataDuringCreation: true,

@@ -51,19 +51,11 @@ export async function GET(req: NextRequest) {
     }
 
     const supabase = await createServerClient();
-    const {
-        data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-        return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
-    }
 
     const { data: transcription, error: tError } = await supabase
         .from("transcriptions")
         .select("*")
         .eq("id", transcriptionId)
-        .eq("user_id", user.id)
         .single();
 
     if (tError || !transcription) {

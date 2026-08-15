@@ -19,12 +19,6 @@ export async function GET(
 
         const supabase = await createServerClient();
 
-        // ── Auth guard ──────────────────────────────────────────────────────
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) {
-            return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
-        }
-
         const { data, error } = await supabase
             .from("transcriptions")
             .select("status, progress, title, engine")

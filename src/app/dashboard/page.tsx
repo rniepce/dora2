@@ -2,20 +2,18 @@ import { createServerClient } from "@/lib/supabase-server";
 import { TranscriptionCard } from "@/components/transcription-card";
 import { EmptyState } from "@/components/empty-state";
 import { Button } from "@/components/ui/button";
-import { Plus, Users, Search, ChevronDown } from "lucide-react";
+import { Plus, Search, ChevronDown } from "lucide-react";
 import Link from "next/link";
 import { Input } from "@/components/ui/input";
 import type { Transcription } from "@/lib/types";
 
 export default async function DashboardPage() {
     const supabase = await createServerClient();
-    const { data: { user } } = await supabase.auth.getUser();
 
-    // ─── Buscar degravações do usuário logado ─────────────────────────────
+    // ─── Buscar todas as degravações (protótipo sem autenticação) ─────────
     const { data: rawTranscriptions, error } = await supabase
         .from("transcriptions")
         .select("*, utterances(count)")
-        .eq("user_id", user!.id)
         .order("created_at", { ascending: false });
 
     // Mapear para incluir utterance_count
@@ -33,60 +31,6 @@ export default async function DashboardPage() {
 
     if (error) {
         console.error("Error fetching transcriptions:", error);
-    }
-
-    // ─── Buscar degravações compartilhadas comigo ─────────────────────────
-    const { data: sharedRecords } = await supabase
-        .from("shared_transcriptions")
-        .select("transcription_id, shared_by, created_at")
-        .eq("shared_with", user!.id)
-        .order("created_at", { ascending: false });
-
-    let sharedTranscriptions: Transcription[] = [];
-
-    if (sharedRecords && sharedRecords.length > 0) {
-        const sharedIds = sharedRecords.map((s) => s.transcription_id);
-
-        const { data: rawShared } = await supabase
-            .from("transcriptions")
-            .select("*, utterances(count)")
-            .in("id", sharedIds)
-            .order("created_at", { ascending: false });
-
-        // Buscar emails dos donos
-        const ownerIds = sharedRecords.map((s) => s.shared_by);
-        const { data: ownerEmails } = await supabase
-            .rpc("get_user_emails_by_ids", { user_ids: ownerIds });
-
-        const emailMap: Record<string, string> = {};
-        if (ownerEmails) {
-            for (const u of ownerEmails) {
-                emailMap[u.id] = u.email;
-            }
-        }
-
-        // Mapear shared_by para email
-        const sharedByMap: Record<string, string> = {};
-        for (const s of sharedRecords) {
-            sharedByMap[s.transcription_id] = emailMap[s.shared_by] ?? "Desconhecido";
-        }
-
-        sharedTranscriptions = (rawShared ?? []).map((t) => {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const raw = t as any;
-            const countArr = raw.utterances;
-            const utterance_count =
-                Array.isArray(countArr) && countArr.length > 0
-                    ? countArr[0].count ?? 0
-                    : 0;
-            const { utterances: _u, ...rest } = raw;
-            return {
-                ...rest,
-                utterance_count,
-                is_shared: true,
-                shared_by_email: sharedByMap[rest.id] ?? "Desconhecido",
-            } as Transcription;
-        });
     }
 
     const items = transcriptions ?? [];
@@ -112,7 +56,7 @@ export default async function DashboardPage() {
                         </Button>
                     </Link>
                 </div>
-                
+
                 <div className="flex justify-end items-center gap-3">
                     <div className="relative w-full sm:w-[300px]">
                         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -141,31 +85,6 @@ export default async function DashboardPage() {
                     {items.map((t) => (
                         <TranscriptionCard key={t.id} transcription={t} />
                     ))}
-                </div>
-            )}
-
-            {/* ─── Compartilhadas Comigo ──────────────────────────────── */}
-            {sharedTranscriptions.length > 0 && (
-                <div className="mt-12">
-                    <div className="mb-6 flex items-center gap-2">
-                        <div className="flex h-8 w-8 items-center justify-center rounded-lg gradient-navy shadow-sm">
-                            <Users className="h-4 w-4 text-white" />
-                        </div>
-                        <div>
-                            <h2 className="text-xl font-bold tracking-tight text-foreground">
-                                Compartilhadas comigo
-                            </h2>
-                            <p className="text-sm text-muted-foreground">
-                                {sharedTranscriptions.length} {sharedTranscriptions.length !== 1 ? "degravações recebidas" : "degravação recebida"}
-                            </p>
-                        </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3">
-                        {sharedTranscriptions.map((t) => (
-                            <TranscriptionCard key={`shared-${t.id}`} transcription={t} />
-                        ))}
-                    </div>
                 </div>
             )}
         </div>

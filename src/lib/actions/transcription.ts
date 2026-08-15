@@ -11,18 +11,9 @@ interface CreateTranscriptionInput {
 export async function createTranscriptionAction(input: CreateTranscriptionInput) {
     const supabase = await createServerClient();
 
-    const {
-        data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-        return { error: "Não autenticado." };
-    }
-
     const { data, error } = await supabase
         .from("transcriptions")
         .insert({
-            user_id: user.id,
             title: input.title,
             glossary: input.glossary || null,
             engine: input.engine,
@@ -84,20 +75,11 @@ export async function updateTranscriptionStatus(
 export async function deleteTranscriptionAction(id: string) {
     const supabase = await createServerClient();
 
-    const {
-        data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-        return { error: "Não autenticado." };
-    }
-
     // Buscar a transcrição primeiro para obter media_url
     const { data: transcription } = await supabase
         .from("transcriptions")
         .select("media_url")
         .eq("id", id)
-        .eq("user_id", user.id)
         .single();
 
     // Deletar utterances primeiro (FK constraint)
@@ -115,8 +97,7 @@ export async function deleteTranscriptionAction(id: string) {
     const { error } = await supabase
         .from("transcriptions")
         .delete()
-        .eq("id", id)
-        .eq("user_id", user.id);
+        .eq("id", id);
 
     if (error) {
         console.error("Error deleting transcription:", error);

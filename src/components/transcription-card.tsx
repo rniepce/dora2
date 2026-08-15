@@ -16,11 +16,7 @@ import {
     AudioLines,
     Globe,
     MessageSquareText,
-    Share2,
-    Users,
 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
-import { ShareModal } from "@/components/share-modal";
 import { deleteTranscriptionAction } from "@/lib/actions/transcription";
 import type { Transcription, TranscriptionStatus } from "@/lib/types";
 
@@ -56,11 +52,9 @@ const statusConfig: Record<
 export function TranscriptionCard({ transcription }: { transcription: Transcription }) {
     const config = statusConfig[transcription.status];
     const isClickable = transcription.status === "completed";
-    const isShared = transcription.is_shared === true;
     const router = useRouter();
     const [deleting, setDeleting] = useState(false);
     const [confirming, setConfirming] = useState(false);
-    const [shareOpen, setShareOpen] = useState(false);
 
     const handleDeleteClick = (e: React.MouseEvent) => {
         e.preventDefault();
@@ -86,12 +80,6 @@ export function TranscriptionCard({ transcription }: { transcription: Transcript
         e.preventDefault();
         e.stopPropagation();
         setConfirming(false);
-    };
-
-    const handleShareClick = (e: React.MouseEvent) => {
-        e.preventDefault();
-        e.stopPropagation();
-        setShareOpen(true);
     };
 
     const engineLabel = transcription.engine === "deepgram" ? "Deepgram" : transcription.engine === "google" ? "Chirp 3" : "Whisper";
@@ -143,34 +131,18 @@ export function TranscriptionCard({ transcription }: { transcription: Transcript
                                 <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${config.className}`}>
                                     {config.label}
                                 </span>
-                                {isShared && (
-                                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800">
-                                        Compartilhado
-                                    </span>
-                                )}
                             </div>
-                            
+
                             {/* Hover Actions */}
                             <div className="flex bg-white/80 rounded backdrop-blur-sm opacity-0 group-hover/card:opacity-100 transition-opacity">
-                                {!isShared && transcription.status === "completed" && (
-                                    <button
-                                        onClick={handleShareClick}
-                                        className="p-1.5 text-muted-foreground hover:text-[#841b2d] hover:bg-red-50 rounded-md transition-colors"
-                                        title="Compartilhar"
-                                    >
-                                        <Share2 className="h-4 w-4" />
-                                    </button>
-                                )}
-                                {!isShared && (
-                                    <button
-                                        onClick={handleDeleteClick}
-                                        disabled={deleting}
-                                        className="p-1.5 text-muted-foreground hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
-                                        title="Apagar degravação"
-                                    >
-                                        <Trash2 className="h-4 w-4" />
-                                    </button>
-                                )}
+                                <button
+                                    onClick={handleDeleteClick}
+                                    disabled={deleting}
+                                    className="p-1.5 text-muted-foreground hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
+                                    title="Apagar degravação"
+                                >
+                                    <Trash2 className="h-4 w-4" />
+                                </button>
                             </div>
                         </div>
 
@@ -200,16 +172,6 @@ export function TranscriptionCard({ transcription }: { transcription: Transcript
                     </>
                 )}
             </div>
-
-            {/* Share modal */}
-            {!isShared && (
-                <ShareModal
-                    transcriptionId={transcription.id}
-                    transcriptionTitle={transcription.title}
-                    open={shareOpen}
-                    onOpenChange={setShareOpen}
-                />
-            )}
         </div>
     );
 }

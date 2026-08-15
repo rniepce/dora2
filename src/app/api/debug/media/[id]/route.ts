@@ -12,12 +12,6 @@ export async function GET(
     const { id } = await params;
     const supabase = await createServerClient();
 
-    // ── Auth guard ──────────────────────────────────────────────────────
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-        return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
-    }
-
     const diagnostics: Record<string, unknown> = { transcriptionId: id };
 
     // 1. Buscar transcrição

@@ -250,19 +250,9 @@ export function EditorClient({ transcription, utterances }: EditorClientProps) {
                         </div>
                     </div>
 
-                    {/* Right: User & Export */}
+                    {/* Right: Export */}
                     <DropdownMenu>
                         <div className="ml-auto flex items-center gap-4">
-                            <div className="hidden sm:flex items-center gap-2">
-                                <div className="h-8 w-8 rounded-full bg-gray-200 overflow-hidden">
-                                     {/* Dummy Avatar block matching mockup */}
-                                     <div className="w-full h-full flex items-center justify-center bg-gray-200 text-gray-500 font-bold text-xs">
-                                         U
-                                     </div>
-                                </div>
-                                <span className="text-sm font-medium text-foreground pr-4 border-r border-border">rniepce</span>
-                            </div>
-
                             <DropdownMenuTrigger asChild>
                                 <Button
                                     variant="outline"
