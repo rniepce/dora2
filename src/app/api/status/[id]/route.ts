@@ -21,7 +21,7 @@ export async function GET(
 
         const { data, error } = await supabase
             .from("transcriptions")
-            .select("status, progress, title, engine")
+            .select("status, progress, title, engine, error_message")
             .eq("id", id)
             .single();
 
@@ -47,6 +47,7 @@ export async function GET(
             progress: data.progress ?? info.fallbackProgress,
             label: info.label,
             title: data.title,
+            errorMessage: data.error_message ?? null,
         });
     } catch (err) {
         return NextResponse.json(

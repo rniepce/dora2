@@ -86,7 +86,17 @@ Para executar o projeto localmente, siga os passos abaixo.
     AZURE_API_KEY=SUA_CHAVE_DE_API_DA_AZURE
     AZURE_ENDPOINT=SEU_ENDPOINT_DA_AZURE
     AZURE_DEPLOYMENT_NAME=NOME_DO_SEU_DEPLOYMENT_NA_AZURE
+
+    # Google Cloud (Speech-to-Text Chirp 3)
+    GOOGLE_CLOUD_PROJECT_ID=ID_DO_SEU_PROJETO_NO_GCP
+    GOOGLE_SERVICE_ACCOUNT_JSON={"type":"service_account", ...}
     ```
+
+    > **Chirp 3 não funciona com chave de API.** O modelo só existe na API
+    > Speech-to-Text **v2**, que exige OAuth2 e recusa API keys com
+    > `IAM_PERMISSION_DENIED`. Crie uma conta de serviço no GCP com o papel
+    > `roles/speech.client`, gere uma chave JSON e cole o conteúdo inteiro
+    > (em uma linha) em `GOOGLE_SERVICE_ACCOUNT_JSON`.
 
 4.  **Execute o servidor de desenvolvimento:**
     ```bash

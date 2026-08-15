@@ -3,11 +3,12 @@ import { execSync } from "child_process";
 import { tmpdir } from "os";
 import { join } from "path";
 import { randomUUID } from "crypto";
+import { GoogleAuth } from "google-auth-library";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 const VIDEO_EXTENSIONS = new Set(["mp4", "mkv", "avi", "mov", "webm", "flv", "wmv"]);
 const CHUNK_DURATION_SEC = 480; // 8 min — margem segura para Recognize (~10 min max)
-const REGION = "us";
+const REGION = "us"; // chirp_3 está em GA nas multi-regiões "us" e "eu"
 
 // ─── Tipos de resposta da API ────────────────────────────────────────────────
 
@@ -203,27 +204,79 @@ export async function runGoogleTranscription(
 
 // ─── Google Speech-to-Text V2 API call ───────────────────────────────────────
 
+/**
+ * A API Speech-to-Text v2 (única com Chirp 3) exige credenciais OAuth2 — chave
+ * de API é rejeitada com IAM_PERMISSION_DENIED, porque uma API key não carrega
+ * identidade IAM. Aceitamos o JSON da conta de serviço inline (prático no
+ * Railway) ou qualquer credencial padrão do ambiente (ADC).
+ */
+let cachedAuth: GoogleAuth | null = null;
+
+function getGoogleAuth(): GoogleAuth {
+    if (cachedAuth) return cachedAuth;
+
+    const scopes = ["https://www.googleapis.com/auth/cloud-platform"];
+    const rawCredentials = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
+
+    if (rawCredentials) {
+        let credentials;
+        try {
+            credentials = JSON.parse(rawCredentials);
+        } catch {
+            throw new Error(
+                "GOOGLE_SERVICE_ACCOUNT_JSON não é um JSON válido — cole o conteúdo completo da chave da conta de serviço"
+            );
+        }
+        cachedAuth = new GoogleAuth({ credentials, scopes });
+    } else {
+        // GOOGLE_APPLICATION_CREDENTIALS ou credenciais do ambiente
+        cachedAuth = new GoogleAuth({ scopes });
+    }
+
+    return cachedAuth;
+}
+
+async function getAccessToken(): Promise<string> {
+    try {
+        const client = await getGoogleAuth().getClient();
+        const { token } = await client.getAccessToken();
+        if (!token) throw new Error("token vazio");
+        return token;
+    } catch (err) {
+        const detail = err instanceof Error ? err.message : String(err);
+        throw new Error(
+            `Não foi possível autenticar no Google Cloud: ${detail}. ` +
+            "O Chirp 3 usa a API Speech-to-Text v2, que não aceita chave de API — " +
+            "configure GOOGLE_SERVICE_ACCOUNT_JSON com a chave de uma conta de serviço que tenha o papel roles/speech.client."
+        );
+    }
+}
+
 async function callGoogleRecognize(
     audioBuffer: Buffer
 ): Promise<GoogleRecognizeResponse> {
-    const apiKey = process.env.GOOGLE_CLOUD_API_KEY;
     const projectId = process.env.GOOGLE_CLOUD_PROJECT_ID;
 
-    if (!apiKey) throw new Error("GOOGLE_CLOUD_API_KEY não configurada");
     if (!projectId) throw new Error("GOOGLE_CLOUD_PROJECT_ID não configurado");
 
-    const recognizeUrl =
-        `https://${REGION}-speech.googleapis.com/v2/projects/${projectId}/locations/${REGION}/recognizers/_:recognize?key=${apiKey}`;
+    const accessToken = await getAccessToken();
 
+    const recognizeUrl =
+        `https://${REGION}-speech.googleapis.com/v2/projects/${projectId}/locations/${REGION}/recognizers/_:recognize`;
+
+    // Chirp 3 não suporta timestamps nem confiança por palavra — pedir esses
+    // recursos faz a API recusar a requisição. A diarização precisa de faixa
+    // explícita de locutores.
     const requestBody = {
         config: {
             autoDecodingConfig: {},
             languageCodes: ["pt-BR"],
             model: "chirp_3",
             features: {
-                enableWordTimeOffsets: true,
-                enableWordConfidence: true,
-                diarizationConfig: {},
+                diarizationConfig: {
+                    minSpeakerCount: 1,
+                    maxSpeakerCount: 6,
+                },
             },
         },
         content: audioBuffer.toString("base64"),
@@ -237,7 +290,11 @@ async function callGoogleRecognize(
     try {
         const res = await fetch(recognizeUrl, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${accessToken}`,
+                "x-goog-user-project": projectId,
+            },
             body: JSON.stringify(requestBody),
             signal: controller.signal,
         });
@@ -302,7 +359,9 @@ function parseResults(
     }
 
     if (allWords.length === 0) {
-        // Fallback: sem words, usar transcript direto
+        // Caminho normal do Chirp 3: o modelo não devolve timestamps por palavra,
+        // só o transcript de cada trecho e o offset onde ele termina. Encadeamos
+        // os trechos usando o fim do anterior como início do seguinte.
         const utterances: Array<{
             speaker: string;
             text: string;
@@ -311,16 +370,27 @@ function parseResults(
             words: Array<{ word: string; start: number; end: number; confidence: number; speaker: number }>;
         }> = [];
 
+        let cursor = 0; // relativo ao início deste chunk
+
         for (const result of results) {
             const alt = result.alternatives?.[0];
-            if (!alt?.transcript) continue;
+            const resultEnd = parseDuration(result.resultEndOffset);
+
+            if (!alt?.transcript?.trim()) {
+                // Trecho sem fala: só avança o cursor
+                if (resultEnd > cursor) cursor = resultEnd;
+                continue;
+            }
+
+            const end = resultEnd > cursor ? resultEnd : cursor;
             utterances.push({
                 speaker: "SPEAKER_00",
                 text: alt.transcript,
-                start: timeOffset,
-                end: parseDuration(result.resultEndOffset) + timeOffset,
+                start: cursor + timeOffset,
+                end: end + timeOffset,
                 words: [],
             });
+            cursor = end;
         }
         return utterances;
     }

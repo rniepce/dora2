@@ -101,6 +101,7 @@ export default function NewTranscriptionPage() {
                     setIsError(true);
                     setIsProcessing(false);
                     setProgressLabel("Erro no processamento");
+                    if (data.errorMessage) setErrorMsg(data.errorMessage);
                     if (pollingRef.current) clearInterval(pollingRef.current);
                 }
             } catch { /* ignore polling errors */ }
