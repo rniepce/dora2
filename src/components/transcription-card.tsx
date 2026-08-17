@@ -15,6 +15,7 @@ import {
     Mic,
     AudioLines,
     Globe,
+    Cloud,
     MessageSquareText,
 } from "lucide-react";
 import { deleteTranscriptionAction } from "@/lib/actions/transcription";
@@ -82,8 +83,8 @@ export function TranscriptionCard({ transcription }: { transcription: Transcript
         setConfirming(false);
     };
 
-    const engineLabel = transcription.engine === "deepgram" ? "Deepgram" : transcription.engine === "google" ? "Chirp 3" : "Whisper";
-    const EngineIcon = transcription.engine === "deepgram" ? AudioLines : transcription.engine === "google" ? Globe : Mic;
+    const engineLabel = transcription.engine === "deepgram" ? "Deepgram" : transcription.engine === "google" ? "Chirp 3" : transcription.engine === "aws" ? "Transcribe" : "Whisper";
+    const EngineIcon = transcription.engine === "deepgram" ? AudioLines : transcription.engine === "google" ? Globe : transcription.engine === "aws" ? Cloud : Mic;
     const segmentCount = transcription.utterance_count ?? 0;
 
     const formattedDate = new Date(transcription.created_at).toLocaleDateString('pt-BR', {

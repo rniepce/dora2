@@ -14,6 +14,7 @@ import {
     Mic,
     AudioLines,
     Globe,
+    Cloud,
 } from "lucide-react";
 import { toast } from "sonner";
 import * as tus from "tus-js-client";
@@ -56,7 +57,7 @@ export default function NewTranscriptionPage() {
     // Form
     const [title, setTitle] = useState("");
     const [glossary, setGlossary] = useState("");
-    const [engine, setEngine] = useState<"whisper" | "deepgram" | "google">("deepgram");
+    const [engine, setEngine] = useState<"whisper" | "deepgram" | "google" | "aws">("deepgram");
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
     // Pipeline
@@ -321,7 +322,7 @@ export default function NewTranscriptionPage() {
                                     Conversão
                                 </div>
                                 <div className={progress >= 55 ? "text-foreground font-medium" : "text-muted-foreground"}>
-                                    {engine === "deepgram" ? "Deepgram" : engine === "google" ? "Chirp 3" : "Whisper"}
+                                    {engine === "deepgram" ? "Deepgram" : engine === "google" ? "Chirp 3" : engine === "aws" ? "Transcribe" : "Whisper"}
                                 </div>
                                 <div className={progress >= 100 ? "text-foreground font-medium" : "text-muted-foreground"}>
                                     Format
@@ -366,7 +367,7 @@ export default function NewTranscriptionPage() {
                     {/* Engine selector */}
                     <div className="space-y-2 pt-2">
                         <Label className="font-semibold text-foreground">Motor de Transcrição</Label>
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                             <button
                                 type="button"
                                 onClick={() => setEngine("whisper")}
@@ -423,6 +424,26 @@ export default function NewTranscriptionPage() {
                                     </p>
                                     <p className="text-[10px] text-muted-foreground leading-tight">
                                         Multilíngue + denoiser
+                                    </p>
+                                </div>
+                            </button>
+
+                            <button
+                                type="button"
+                                onClick={() => setEngine("aws")}
+                                disabled={isProcessing || isDone}
+                                className={`flex flex-col items-center justify-center gap-1.5 rounded-xl border p-4 text-center transition-all min-h-[90px] ${engine === "aws"
+                                    ? "border-[#841b2d] bg-red-50/30"
+                                    : "border-border hover:border-[#841b2d]/30 hover:bg-gray-50"
+                                    }`}
+                            >
+                                <Cloud className={`h-5 w-5 ${engine === "aws" ? "text-[#841b2d]" : "text-muted-foreground"}`} />
+                                <div className="space-y-0.5">
+                                    <p className={`text-[13px] font-semibold ${engine === "aws" ? "text-foreground" : "text-muted-foreground"}`}>
+                                        Amazon Transcribe
+                                    </p>
+                                    <p className="text-[10px] text-muted-foreground leading-tight">
+                                        Diarização + timestamps
                                     </p>
                                 </div>
                             </button>

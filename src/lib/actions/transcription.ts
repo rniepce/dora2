@@ -5,7 +5,7 @@ import { createServerClient } from "@/lib/supabase-server";
 interface CreateTranscriptionInput {
     title: string;
     glossary: string | null;
-    engine: "whisper" | "deepgram" | "google";
+    engine: "whisper" | "deepgram" | "google" | "aws";
 }
 
 export async function createTranscriptionAction(input: CreateTranscriptionInput) {

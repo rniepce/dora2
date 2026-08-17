@@ -3,6 +3,7 @@ import { createServerClient } from "@/lib/supabase-server";
 import { runWhisperTranscription } from "@/lib/transcribe-whisper";
 import { runDeepgramTranscription } from "@/lib/transcribe-deepgram";
 import { runGoogleTranscription } from "@/lib/transcribe-google";
+import { runAwsTranscription } from "@/lib/transcribe-aws";
 import { runFormatting } from "@/lib/format-llm";
 
 // Railway/Vercel: permitir até 5 minutos de processamento
@@ -10,7 +11,7 @@ export const maxDuration = 300;
 
 /**
  * POST /api/process
- * Body: { transcriptionId: string, engine?: "whisper" | "deepgram" | "google" }
+ * Body: { transcriptionId: string, engine?: "whisper" | "deepgram" | "google" | "aws" }
  *
  * Orquestra o pipeline completo:
  * 1. Transcreve com Whisper ou Deepgram
@@ -36,6 +37,8 @@ export async function POST(request: Request) {
                 await runDeepgramTranscription(transcriptionId, supabase);
             } else if (engine === "google") {
                 await runGoogleTranscription(transcriptionId, supabase);
+            } else if (engine === "aws") {
+                await runAwsTranscription(transcriptionId, supabase);
             } else {
                 await runWhisperTranscription(transcriptionId, supabase);
             }

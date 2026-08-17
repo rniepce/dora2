@@ -91,6 +91,12 @@ Para executar o projeto localmente, siga os passos abaixo.
     GOOGLE_CLOUD_PROJECT_ID=ID_DO_SEU_PROJETO_NO_GCP
     GOOGLE_SERVICE_ACCOUNT_JSON={"type":"service_account", ...}
     GOOGLE_CLOUD_STORAGE_BUCKET=nome-do-bucket
+
+    # AWS (Amazon Transcribe)
+    AWS_REGION=us-east-1
+    AWS_ACCESS_KEY_ID=SUA_ACCESS_KEY
+    AWS_SECRET_ACCESS_KEY=SUA_SECRET_KEY
+    AWS_S3_BUCKET=nome-do-bucket-s3
     ```
 
     > **Chirp 3 não funciona com chave de API.** O modelo só existe na API
@@ -104,6 +110,12 @@ Para executar o projeto localmente, siga os passos abaixo.
     > Storage. Crie um bucket na multi-região `us` e dê à conta de serviço o
     > papel `roles/storage.objectAdmin` nele. O app sobe o WAV, transcreve e
     > apaga o arquivo — nada de mídia fica guardado lá.
+    >
+    > **O Amazon Transcribe segue o mesmo desenho.** A transcrição em lote só lê
+    > do S3: crie um bucket na região de `AWS_REGION` e use uma chave IAM com
+    > `s3:PutObject`/`s3:DeleteObject` nele mais `transcribe:StartTranscriptionJob`,
+    > `transcribe:GetTranscriptionJob` e `transcribe:DeleteTranscriptionJob`.
+    > O áudio também é apagado ao final.
 
 4.  **Execute o servidor de desenvolvimento:**
     ```bash
