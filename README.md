@@ -90,6 +90,7 @@ Para executar o projeto localmente, siga os passos abaixo.
     # Google Cloud (Speech-to-Text Chirp 3)
     GOOGLE_CLOUD_PROJECT_ID=ID_DO_SEU_PROJETO_NO_GCP
     GOOGLE_SERVICE_ACCOUNT_JSON={"type":"service_account", ...}
+    GOOGLE_CLOUD_STORAGE_BUCKET=nome-do-bucket
     ```
 
     > **Chirp 3 não funciona com chave de API.** O modelo só existe na API
@@ -97,6 +98,12 @@ Para executar o projeto localmente, siga os passos abaixo.
     > `IAM_PERMISSION_DENIED`. Crie uma conta de serviço no GCP com o papel
     > `roles/speech.client`, gere uma chave JSON e cole o conteúdo inteiro
     > (em uma linha) em `GOOGLE_SERVICE_ACCOUNT_JSON`.
+    >
+    > **E precisa de um bucket.** O método síncrono aceita só 60 s de áudio;
+    > audiências usam o `BatchRecognize`, que lê exclusivamente do Cloud
+    > Storage. Crie um bucket na multi-região `us` e dê à conta de serviço o
+    > papel `roles/storage.objectAdmin` nele. O app sobe o WAV, transcreve e
+    > apaga o arquivo — nada de mídia fica guardado lá.
 
 4.  **Execute o servidor de desenvolvimento:**
     ```bash

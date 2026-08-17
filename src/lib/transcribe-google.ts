@@ -7,8 +7,16 @@ import { GoogleAuth } from "google-auth-library";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 const VIDEO_EXTENSIONS = new Set(["mp4", "mkv", "avi", "mov", "webm", "flv", "wmv"]);
-const CHUNK_DURATION_SEC = 480; // 8 min — margem segura para Recognize (~10 min max)
 const REGION = "us"; // chirp_3 está em GA nas multi-regiões "us" e "eu"
+
+// WAV PCM 16 kHz mono 16-bit
+const BYTES_PER_SEC = 32000;
+
+// O método síncrono Recognize aceita no máximo 60 s de áudio. Audiências são
+// muito mais longas, então usamos BatchRecognize — que aceita até 8 h, mas só
+// lê o áudio de um bucket do Cloud Storage.
+const POLL_INTERVAL_MS = 5000;
+const POLL_TIMEOUT_MS = 30 * 60 * 1000;
 
 // ─── Tipos de resposta da API ────────────────────────────────────────────────
 
@@ -17,7 +25,7 @@ interface GoogleWordInfo {
     endOffset?: string;
     word: string;
     confidence?: number;
-    speakerLabel?: string; // "1", "2", etc.
+    speakerLabel?: string; // chirp_3 numera a partir de "0"
 }
 
 interface GoogleAlternative {
@@ -34,6 +42,15 @@ interface GoogleResult {
 
 interface GoogleRecognizeResponse {
     results?: GoogleResult[];
+}
+
+interface GoogleOperation {
+    name?: string;
+    done?: boolean;
+    error?: { code?: number; message?: string };
+    response?: {
+        results?: Record<string, { transcript?: GoogleRecognizeResponse; error?: { message?: string } }>;
+    };
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -103,65 +120,23 @@ export async function runGoogleTranscription(
         await unlink(outputPath).catch(() => { });
     }
 
-    // 4. Transcrever (com chunking se necessário)
+    // 4. Transcrever — o áudio inteiro em uma única chamada BatchRecognize, o que
+    //    mantém a diarização consistente do começo ao fim da audiência.
     await updateProgress(30);
 
-    // Durar em segundos (WAV PCM 16kHz mono 16-bit = 32000 bytes/seg)
-    const estimatedDurationSec = audioBuffer.length / 32000;
+    const estimatedDurationSec = audioBuffer.length / BYTES_PER_SEC;
     console.log(`[Google] Estimated duration: ${estimatedDurationSec.toFixed(0)}s`);
 
-    interface ParsedUtterance {
-        speaker: string;
-        text: string;
-        start: number;
-        end: number;
-        words: Array<{ word: string; start: number; end: number; confidence: number; speaker: number }>;
-    }
+    const objectName = `${transcriptionId}/${tmpId}.wav`;
+    let allUtterances: ReturnType<typeof parseResults> = [];
 
-    let allUtterances: ParsedUtterance[] = [];
-
-    if (estimatedDurationSec > CHUNK_DURATION_SEC) {
-        // Chunking para áudios longos
-        console.log("[Google] Audio too long, chunking...");
-        const chunkInputPath = join(tmpdir(), `gc-chunk-input-${tmpId}.wav`);
-        await writeFile(chunkInputPath, audioBuffer);
-
-        try {
-            const durationStr = execSync(
-                `ffprobe -v error -show_entries format=duration -of csv=p=0 "${chunkInputPath}"`,
-                { timeout: 30000, encoding: "utf-8" }
-            ).trim();
-            const totalDuration = parseFloat(durationStr);
-            const numChunks = Math.ceil(totalDuration / CHUNK_DURATION_SEC);
-            console.log(`[Google] Duration: ${totalDuration.toFixed(0)}s, ${numChunks} chunks`);
-
-            for (let i = 0; i < numChunks; i++) {
-                const startSec = i * CHUNK_DURATION_SEC;
-                const chunkPath = join(tmpdir(), `gc-chunk-${tmpId}-${i}.wav`);
-
-                try {
-                    execSync(
-                        `ffmpeg -i "${chunkInputPath}" -ss ${startSec} -t ${CHUNK_DURATION_SEC} -acodec pcm_s16le -ar 16000 -ac 1 -y "${chunkPath}"`,
-                        { timeout: 120000, stdio: "pipe" }
-                    );
-                    const chunkBuffer = await readFile(chunkPath);
-                    const chunkResults = await callGoogleRecognize(chunkBuffer);
-                    const chunkUtterances = parseResults(chunkResults, startSec);
-                    allUtterances.push(...chunkUtterances);
-
-                    const chunkProgress = 35 + Math.round(((i + 1) / numChunks) * 20);
-                    await updateProgress(chunkProgress);
-                } finally {
-                    await unlink(chunkPath).catch(() => { });
-                }
-            }
-        } finally {
-            await unlink(chunkInputPath).catch(() => { });
-        }
-    } else {
+    await uploadToGcs(audioBuffer, objectName);
+    try {
         await updateProgress(35);
-        const results = await callGoogleRecognize(audioBuffer);
-        allUtterances = parseResults(results, 0);
+        const results = await callGoogleBatchRecognize(objectName, updateProgress);
+        allUtterances = parseResults(results, 0, estimatedDurationSec);
+    } finally {
+        await deleteFromGcs(objectName);
     }
 
     await updateProgress(55);
@@ -252,20 +227,72 @@ async function getAccessToken(): Promise<string> {
     }
 }
 
-async function callGoogleRecognize(
-    audioBuffer: Buffer
-): Promise<GoogleRecognizeResponse> {
-    const projectId = process.env.GOOGLE_CLOUD_PROJECT_ID;
+const GCS_BUCKET_ENV = "GOOGLE_CLOUD_STORAGE_BUCKET";
 
-    if (!projectId) throw new Error("GOOGLE_CLOUD_PROJECT_ID não configurado");
+function requireEnv(name: string): string {
+    const value = process.env[name];
+    if (!value) throw new Error(`${name} não configurado`);
+    return value;
+}
 
+/** Sobe o WAV para o bucket — o BatchRecognize só lê áudio do Cloud Storage. */
+async function uploadToGcs(audioBuffer: Buffer, objectName: string): Promise<void> {
+    const bucket = requireEnv(GCS_BUCKET_ENV);
     const accessToken = await getAccessToken();
 
-    const recognizeUrl =
-        `https://${REGION}-speech.googleapis.com/v2/projects/${projectId}/locations/${REGION}/recognizers/_:recognize`;
+    const url = `https://storage.googleapis.com/upload/storage/v1/b/${bucket}/o` +
+        `?uploadType=media&name=${encodeURIComponent(objectName)}`;
 
-    // Chirp 3 não suporta timestamps nem confiança por palavra — pedir esses
-    // recursos faz a API recusar a requisição. A diarização precisa de faixa
+    console.log(`[Google] Uploading ${(audioBuffer.length / 1024 / 1024).toFixed(1)}MB to gs://${bucket}/${objectName}`);
+
+    const res = await fetch(url, {
+        method: "POST",
+        headers: {
+            "Content-Type": "audio/wav",
+            "Content-Length": String(audioBuffer.length),
+            Authorization: `Bearer ${accessToken}`,
+        },
+        body: new Uint8Array(audioBuffer),
+    });
+
+    if (!res.ok) {
+        const errorText = await res.text();
+        throw new Error(
+            `Falha ao enviar áudio para o Cloud Storage (${res.status}): ${errorText.substring(0, 300)}. ` +
+            `Confira se ${GCS_BUCKET_ENV} existe e se a conta de serviço tem roles/storage.objectAdmin nele.`
+        );
+    }
+}
+
+/** Remove o áudio temporário do bucket — não guardamos mídia de audiência lá. */
+async function deleteFromGcs(objectName: string): Promise<void> {
+    try {
+        const bucket = requireEnv(GCS_BUCKET_ENV);
+        const accessToken = await getAccessToken();
+        await fetch(
+            `https://storage.googleapis.com/storage/v1/b/${bucket}/o/${encodeURIComponent(objectName)}`,
+            { method: "DELETE", headers: { Authorization: `Bearer ${accessToken}` } }
+        );
+    } catch (err) {
+        // Limpeza é best-effort: não vale derrubar a transcrição já concluída.
+        console.error("[Google] Falha ao limpar objeto do GCS:", err);
+    }
+}
+
+async function callGoogleBatchRecognize(
+    objectName: string,
+    updateProgress: (progress: number, status?: string) => Promise<void>
+): Promise<GoogleRecognizeResponse> {
+    const projectId = requireEnv("GOOGLE_CLOUD_PROJECT_ID");
+    const bucket = requireEnv(GCS_BUCKET_ENV);
+    const gcsUri = `gs://${bucket}/${objectName}`;
+    const accessToken = await getAccessToken();
+
+    const baseUrl = `https://${REGION}-speech.googleapis.com/v2`;
+    const batchUrl = `${baseUrl}/projects/${projectId}/locations/${REGION}/recognizers/_:batchRecognize`;
+
+    // chirp_3 não suporta enableWordTimeOffsets nem enableWordConfidence —
+    // pedi-los faz a API recusar a requisição. A diarização precisa de faixa
     // explícita de locutores.
     const requestBody = {
         config: {
@@ -273,57 +300,81 @@ async function callGoogleRecognize(
             languageCodes: ["pt-BR"],
             model: "chirp_3",
             features: {
-                diarizationConfig: {
-                    minSpeakerCount: 1,
-                    maxSpeakerCount: 6,
-                },
+                diarizationConfig: { minSpeakerCount: 1, maxSpeakerCount: 6 },
             },
         },
-        content: audioBuffer.toString("base64"),
+        files: [{ uri: gcsUri }],
+        recognitionOutputConfig: { inlineResponseConfig: {} },
     };
 
-    console.log(`[Google] Sending ${(audioBuffer.length / 1024 / 1024).toFixed(1)}MB to Chirp 3...`);
+    console.log(`[Google] BatchRecognize on ${gcsUri}...`);
 
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 600000); // 10 min timeout
+    const res = await fetch(batchUrl, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${accessToken}`,
+            "x-goog-user-project": projectId,
+        },
+        body: JSON.stringify(requestBody),
+    });
 
-    try {
-        const res = await fetch(recognizeUrl, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${accessToken}`,
-                "x-goog-user-project": projectId,
-            },
-            body: JSON.stringify(requestBody),
-            signal: controller.signal,
+    if (!res.ok) {
+        const errorText = await res.text();
+        console.error("[Google] API error:", res.status, errorText);
+        throw new Error(`Google Speech API ${res.status}: ${errorText.substring(0, 300)}`);
+    }
+
+    const operation: GoogleOperation = await res.json();
+    if (!operation.name) throw new Error("Google Speech API não devolveu uma operação");
+
+    // A operação é assíncrona: consultamos até terminar.
+    const deadline = Date.now() + POLL_TIMEOUT_MS;
+    let done: GoogleOperation = operation;
+
+    while (!done.done) {
+        if (Date.now() > deadline) {
+            throw new Error("Google Speech API: transcrição excedeu 30 min sem concluir");
+        }
+        await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+
+        const pollToken = await getAccessToken();
+        const pollRes = await fetch(`${baseUrl}/${operation.name}`, {
+            headers: { Authorization: `Bearer ${pollToken}`, "x-goog-user-project": projectId },
         });
 
-        clearTimeout(timeoutId);
-
-        if (!res.ok) {
-            const errorText = await res.text();
-            console.error("[Google] API error:", res.status, errorText);
-            throw new Error(`Google Speech API ${res.status}: ${errorText.substring(0, 300)}`);
+        if (!pollRes.ok) {
+            const errorText = await pollRes.text();
+            throw new Error(`Google Speech API ${pollRes.status} ao consultar operação: ${errorText.substring(0, 300)}`);
         }
 
-        const data: GoogleRecognizeResponse = await res.json();
-        console.log(`[Google] OK — results: ${data.results?.length ?? 0}`);
-        return data;
-    } catch (err) {
-        clearTimeout(timeoutId);
-        if (err instanceof Error && err.name === "AbortError") {
-            throw new Error("Google Speech API timeout (10 min) — áudio pode ser muito longo");
-        }
-        throw err;
+        done = await pollRes.json();
+
+        // Progresso do bloco de transcrição: 35 → 55
+        const elapsed = POLL_TIMEOUT_MS - (deadline - Date.now());
+        await updateProgress(35 + Math.min(19, Math.round(elapsed / 30000)));
     }
+
+    if (done.error) {
+        throw new Error(`Google Speech API: ${done.error.message ?? "erro desconhecido na operação"}`);
+    }
+
+    const fileResult = done.response?.results?.[gcsUri];
+    if (fileResult?.error) {
+        throw new Error(`Google Speech API: ${fileResult.error.message ?? "erro ao processar o áudio"}`);
+    }
+
+    const transcript = fileResult?.transcript ?? {};
+    console.log(`[Google] OK — results: ${transcript.results?.length ?? 0}`);
+    return transcript;
 }
 
 // ─── Parse de resultados com diarização ──────────────────────────────────────
 
 function parseResults(
     response: GoogleRecognizeResponse,
-    timeOffset: number
+    timeOffset: number,
+    chunkDuration: number
 ): Array<{
     speaker: string;
     text: string;
@@ -334,66 +385,68 @@ function parseResults(
     const results = response.results ?? [];
     if (results.length === 0) return [];
 
-    // Coletar todas as words com seus speakers
-    const allWords: Array<{
-        word: string;
-        start: number;
-        end: number;
-        confidence: number;
-        speakerLabel: string;
-    }> = [];
+    // Coletar as words cruas — o Chirp 3 devolve apenas `word` e `speakerLabel`,
+    // sem startOffset/endOffset.
+    const rawWords: Array<{ word: string; startOffset?: string; endOffset?: string; speakerLabel: string }> = [];
 
     for (const result of results) {
         const alt = result.alternatives?.[0];
         if (!alt?.words) continue;
 
         for (const w of alt.words) {
-            allWords.push({
+            rawWords.push({
                 word: w.word,
-                start: parseDuration(w.startOffset) + timeOffset,
-                end: parseDuration(w.endOffset) + timeOffset,
-                confidence: w.confidence ?? 0,
-                speakerLabel: w.speakerLabel ?? "1",
+                startOffset: w.startOffset,
+                endOffset: w.endOffset,
+                speakerLabel: w.speakerLabel ?? "0",
             });
         }
     }
+
+    // Sem timestamps por palavra, distribuímos a duração do trecho igualmente
+    // entre as palavras. É aproximado, mas mantém a linha do tempo monotônica e
+    // utilizável — sem isso todas as falas ficariam em 0s.
+    const hasOffsets = rawWords.some((w) => w.startOffset != null);
+    const perWord = rawWords.length > 0 && chunkDuration > 0 ? chunkDuration / rawWords.length : 0;
+
+    const allWords = rawWords.map((w, i) => ({
+        word: w.word,
+        start: hasOffsets ? parseDuration(w.startOffset) + timeOffset : timeOffset + i * perWord,
+        end: hasOffsets ? parseDuration(w.endOffset) + timeOffset : timeOffset + (i + 1) * perWord,
+        confidence: 0, // chirp_3 não devolve confiança por palavra
+        speakerLabel: w.speakerLabel,
+    }));
 
     if (allWords.length === 0) {
-        // Caminho normal do Chirp 3: o modelo não devolve timestamps por palavra,
-        // só o transcript de cada trecho e o offset onde ele termina. Encadeamos
-        // os trechos usando o fim do anterior como início do seguinte.
-        const utterances: Array<{
-            speaker: string;
-            text: string;
-            start: number;
-            end: number;
-            words: Array<{ word: string; start: number; end: number; confidence: number; speaker: number }>;
-        }> = [];
+        // Sem words: só o transcript de cada trecho. Repartimos a duração do
+        // trecho proporcionalmente ao tamanho de cada transcript.
+        const spoken = results
+            .map((r) => r.alternatives?.[0]?.transcript?.trim() ?? "")
+            .filter((t) => t.length > 0);
 
-        let cursor = 0; // relativo ao início deste chunk
+        const totalChars = spoken.reduce((sum, t) => sum + t.length, 0);
+        let cursor = timeOffset;
 
-        for (const result of results) {
-            const alt = result.alternatives?.[0];
-            const resultEnd = parseDuration(result.resultEndOffset);
-
-            if (!alt?.transcript?.trim()) {
-                // Trecho sem fala: só avança o cursor
-                if (resultEnd > cursor) cursor = resultEnd;
-                continue;
-            }
-
-            const end = resultEnd > cursor ? resultEnd : cursor;
-            utterances.push({
+        return spoken.map((text) => {
+            const share = totalChars > 0 ? (text.length / totalChars) * chunkDuration : 0;
+            const start = cursor;
+            cursor += share;
+            return {
                 speaker: "SPEAKER_00",
-                text: alt.transcript,
-                start: cursor + timeOffset,
-                end: end + timeOffset,
-                words: [],
-            });
-            cursor = end;
-        }
-        return utterances;
+                text,
+                start,
+                end: cursor,
+                words: [] as Array<{ word: string; start: number; end: number; confidence: number; speaker: number }>,
+            };
+        });
     }
+
+    // O Chirp 3 numera os locutores a partir de "0", mas outros modelos usam "1".
+    // Normalizamos os rótulos distintos para 0..n-1 para não fundir locutores.
+    const speakerIndex = new Map<string, number>();
+    [...new Set(allWords.map((w) => w.speakerLabel))]
+        .sort((a, b) => (parseInt(a, 10) || 0) - (parseInt(b, 10) || 0))
+        .forEach((label, idx) => speakerIndex.set(label, idx));
 
     // Agrupar words consecutivas pelo mesmo speaker em utterances
     const utterances: Array<{
@@ -413,23 +466,24 @@ function parseResults(
             currentWords.push(w);
         } else {
             // Flush utterance
-            utterances.push(buildUtterance(currentSpeaker, currentWords));
+            utterances.push(buildUtterance(currentSpeaker, currentWords, speakerIndex));
             currentSpeaker = w.speakerLabel;
             currentWords = [w];
         }
     }
     // Flush last utterance
-    utterances.push(buildUtterance(currentSpeaker, currentWords));
+    utterances.push(buildUtterance(currentSpeaker, currentWords, speakerIndex));
 
     return utterances;
 }
 
 function buildUtterance(
     speakerLabel: string,
-    words: Array<{ word: string; start: number; end: number; confidence: number; speakerLabel: string }>
+    words: Array<{ word: string; start: number; end: number; confidence: number; speakerLabel: string }>,
+    speakerIndex: Map<string, number>
 ) {
-    const speakerNum = parseInt(speakerLabel, 10) - 1; // Google usa "1", "2"... converter para 0-based
-    const label = `SPEAKER_${String(Math.max(0, speakerNum)).padStart(2, "0")}`;
+    const speakerNum = speakerIndex.get(speakerLabel) ?? 0;
+    const label = `SPEAKER_${String(speakerNum).padStart(2, "0")}`;
 
     return {
         speaker: label,
@@ -441,7 +495,7 @@ function buildUtterance(
             start: w.start,
             end: w.end,
             confidence: w.confidence,
-            speaker: Math.max(0, parseInt(w.speakerLabel, 10) - 1),
+            speaker: speakerIndex.get(w.speakerLabel) ?? 0,
         })),
     };
 }
