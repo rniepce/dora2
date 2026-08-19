@@ -75,13 +75,6 @@ export async function updateTranscriptionStatus(
 export async function deleteTranscriptionAction(id: string) {
     const supabase = await createServerClient();
 
-    // Buscar a transcrição primeiro para obter media_url
-    const { data: transcription } = await supabase
-        .from("transcriptions")
-        .select("media_url")
-        .eq("id", id)
-        .single();
-
     // Deletar utterances primeiro (FK constraint)
     const { error: uttError } = await supabase
         .from("utterances")
@@ -104,17 +97,32 @@ export async function deleteTranscriptionAction(id: string) {
         return { error: "Erro ao apagar degravação." };
     }
 
-    // Limpar arquivo de mídia do Storage (se existir)
-    if (transcription?.media_url) {
-        try {
-            const url = new URL(transcription.media_url);
-            const pathMatch = url.pathname.match(/\/storage\/v1\/object\/[^/]+\/media\/(.+)/);
-            if (pathMatch) {
-                await supabase.storage.from("media").remove([pathMatch[1]]);
+    // Limpar arquivos de mídia do Storage.
+    //
+    // Listamos a pasta da degravação em vez de derivar o caminho do media_url:
+    // quando o upload falha no meio, o arquivo já está no bucket mas media_url
+    // continua nulo, e o arquivo ficava órfão para sempre ocupando a cota.
+    try {
+        const { data: arquivos, error: listError } = await supabase.storage
+            .from("media")
+            .list(id);
+
+        if (listError) {
+            console.error("Error listing media files:", listError);
+        } else if (arquivos && arquivos.length > 0) {
+            const caminhos = arquivos.map((arquivo) => `${id}/${arquivo.name}`);
+            const { error: removeError } = await supabase.storage
+                .from("media")
+                .remove(caminhos);
+
+            if (removeError) {
+                console.error("Error removing media files:", removeError);
             }
-        } catch {
-            // Ignorar erro de limpeza de storage — a transcrição já foi deletada
         }
+    } catch (err) {
+        // A degravação já saiu do banco; falha na limpeza não deve virar erro
+        // para o usuário — só fica registrada para investigação.
+        console.error("Storage cleanup failed:", err);
     }
 
     // Revalidar a página do dashboard para atualizar o cache do Next.js
